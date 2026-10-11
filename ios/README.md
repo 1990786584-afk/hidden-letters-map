@@ -53,5 +53,11 @@ ZFxF 的第三个原生 tab 是「约会来信」。它会向已登录的 Node �
 - 原生 APNs 推送尚未实现。创建卡片 **不会自动弹出 iPhone 通知**。
 - 只有配置并部署受信任的 `DATE_CARD_WEBHOOK_URL` 时，提交后才会通知你自己的 Agent 服务；**当前没有自动通往 ChatGPT 的回调**。
 
-### 当前 VPS 部署状态
-开发中的 VPS 独立实例监听在 `127.0.0.1:5168`（非公开地址）。要在 iPhone 上连接，还需要给现有域名设置 **HTTPS 反向代理**。在验证外部访问携带密码确实返回 JSON 前，不要把 `https://ryanecho.xyz/zfxf` 当成可用 URL。域名和登录密码不写入源码。
+### 当前 VPS 部署状态（2026-10-11 已验证）
+独立 Node 实例在 `127.0.0.1:5168` 监听，通过 Nginx 提供正式可访问的 **`https://memory.ryanecho.xyz/zfxf`**。该主机的 DNS 直连服务器，避免主域名的 Cloudflare Flexible 模式使密钥在源站链路上通过 HTTP 传输。HTTP 请求会重定向到 HTTPS，TLS 证书已验证有效。
+
+真实测试：`GET /zfxf/api/travel-map`、`/zfxf/api/dates`、`/zfxf/api/date-cards` 使用 Bearer 密码返回 200，未授权请求返回 401。原有 `memory.ryanecho.xyz` 首页和 `/api/journal-data` 也仍正常。服务端密码随机生成，仅存 `/etc/zfxf-love-map.env`，没有推送到 GitHub；**不要把密码发送到 GitHub 或贴在公开聊天里**。
+
+首次连接：在 iPhone 的 ZFxF 登录页输入 `https://memory.ryanecho.xyz/zfxf`，并填写服务器本机 `/etc/zfxf-love-map.env` 里的 `PASSWORD`。旧版 iPhone App 也可以手动输入新地址，无需等待重新安装；新编译版本会自动预填该 URL。
+
+注意：现有 Cloudflare 代理的 `ryanecho.xyz` 不能作为已安全就绪的 ZFxF 地址，只有上述直连 HTTPS 主机通过了端到端验证。
