@@ -77,11 +77,18 @@ struct RootView: View {
         }
         .preferredColorScheme(.light)
         .task(id: session.connected) {
+            if scenePhase == .active { session.refreshStoredConnection() }
             await geofences.refreshIfEnabled(api: session.api)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                session.refreshStoredConnection()
                 Task { await geofences.refreshIfEnabled(api: session.api) }
+            }
+        }
+        .onChange(of: session.connected) { _, connected in
+            if connected && geofences.requestedLetterID != nil {
+                selectedTab = .passing
             }
         }
         .onChange(of: geofences.requestedLetterID) { _, id in
