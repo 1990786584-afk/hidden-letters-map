@@ -119,6 +119,27 @@ struct DateCardResult: Decodable {
     let card: DateCard
 }
 
+// Explicit sharing, separate from the legacy passive tracking API.
+// The server keeps only the latest point for 24h, and allows revocation.
+struct ManualLocationPayload: Encodable {
+    let lat: Double
+    let lon: Double
+    let acc: Double
+}
+
+struct SharedLocation: Decodable {
+    let lat: Double
+    let lon: Double
+    let acc: Double
+    let at: String
+    let expiresAt: String
+}
+
+struct SharedLocationResponse: Decodable {
+    let ok: Bool?
+    let shared: SharedLocation?
+}
+
 struct LetterOpenPayload: Encodable {
     let lat: Double
     let lon: Double
@@ -181,6 +202,28 @@ struct LoveMapAPI {
     private func post<Payload: Encodable, Result: Decodable>(_ path: String, payload: Payload) async throws -> Result {
         let data = try await requestData(path: path, method: "POST", body: try JSONEncoder().encode(payload))
         return try JSONDecoder().decode(Result.self, from: data)
+    }
+
+    func currentSharedLocation() async throws -> SharedLocation? {
+        let result: SharedLocationResponse = try await get("/api/location/share")
+        return result.shared
+    }
+
+    func shareLocationOnce(_ location: CLLocation) async throws -> SharedLocation {
+        let payload = ManualLocationPayload(
+            lat: location.coordinate.latitude,
+            lon: location.coordinate.longitude,
+            acc: location.horizontalAccuracy
+        )
+        let result: SharedLocationResponse = try await post("/api/location/share", payload: payload)
+        guard let shared = result.shared else { throw LoveMapError.invalidResponse }
+        return shared
+    }
+
+    func revokeSharedLocation() async throws {
+        let data = try await requestData(path: "/api/location/share", method: "DELETE")
+        let result = try JSONDecoder().decode(SharedLocationResponse.self, from: data)
+        guard result.ok == true && result.shared == nil else { throw LoveMapError.invalidResponse }
     }
 
     func treasureMap() async throws -> TreasureMap { try await get("/api/travel-map") }
