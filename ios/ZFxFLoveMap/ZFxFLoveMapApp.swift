@@ -1,6 +1,31 @@
 import SwiftUI
 import MapKit
 
+// ZFxF 奶油蜜桃粉：暖粉色，不使用偏紫的豆沙色。
+enum LovePalette {
+    static let background = Color(red: 1.0, green: 0.965, blue: 0.957)   // #FFF6F4
+    static let blush = Color(red: 1.0, green: 0.894, blue: 0.902)        // #FFE4E6
+    static let accent = Color(red: 0.863, green: 0.447, blue: 0.569)     // #DC7291
+    static let envelope = Color(red: 0.965, green: 0.702, blue: 0.741)   // #F6B3BD
+}
+
+// 用原生矢量图替换不可控颜色的 💌 Emoji，信封与爱心都能呈现暖粉色。
+struct PinkLetter: View {
+    var size: CGFloat = 54
+    var body: some View {
+        ZStack {
+            Image(systemName: "envelope.fill")
+                .font(.system(size: size, weight: .regular))
+                .foregroundStyle(LovePalette.envelope)
+            Image(systemName: "heart.fill")
+                .font(.system(size: size * 0.33, weight: .medium))
+                .foregroundStyle(LovePalette.accent)
+                .offset(y: -size * 0.045)
+        }
+        .accessibilityLabel("粉色爱心信封")
+    }
+}
+
 @main
 struct ZFxFLoveMapApp: App {
     @StateObject private var session = LoveMapSession()
@@ -9,7 +34,7 @@ struct ZFxFLoveMapApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(session)
-                .tint(Color(red: 0.68, green: 0.44, blue: 0.54))
+                .tint(LovePalette.accent)
         }
     }
 }
@@ -48,7 +73,7 @@ struct ConnectionSetupView: View {
             ScrollView {
                 VStack(spacing: 22) {
                     Spacer(minLength: 50)
-                    Text("💌").font(.system(size: 72))
+                    PinkLetter(size: 82).frame(height: 94)
                     VStack(spacing: 10) {
                         Text("ZFxF · Love Map")
                             .font(.system(size: 31, weight: .medium, design: .serif))
@@ -84,7 +109,7 @@ struct ConnectionSetupView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .foregroundStyle(.white)
-                        .background(Color(red: 0.68, green: 0.44, blue: 0.54), in: Capsule())
+                        .background(LovePalette.accent, in: Capsule())
                         .disabled(session.connecting)
                     }
                     .padding(21)
@@ -95,7 +120,7 @@ struct ConnectionSetupView: View {
                 .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity)
             }
-            .background(Color(red: 0.98, green: 0.94, blue: 0.95))
+            .background(LovePalette.background)
         }
         .onAppear { address = session.serverAddress }
     }
@@ -163,7 +188,7 @@ struct TreasureMapView: View {
                             Annotation(stop.name, coordinate: .init(latitude: stop.lat, longitude: stop.lon)) {
                                 Image(systemName: "mappin.circle.fill")
                                     .font(.title2)
-                                    .foregroundStyle(.pink, .white)
+                                    .foregroundStyle(LovePalette.accent, .white)
                             }
                         }
                     }
@@ -247,7 +272,7 @@ struct TreasureMapView: View {
                         }
                         .padding(22)
                     }
-                    .background(Color(red: 0.98, green: 0.94, blue: 0.95))
+                    .background(LovePalette.background)
                     .navigationTitle("一封给你的信")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
