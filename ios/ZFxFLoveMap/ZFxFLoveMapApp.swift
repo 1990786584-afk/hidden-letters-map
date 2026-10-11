@@ -128,6 +128,10 @@ struct ConnectionSetupView: View {
 
 struct ConnectionInfoView: View {
     @EnvironmentObject private var session: LoveMapSession
+    @State private var sharedLocation: SharedLocation?
+    @State private var checkingShare = true
+    @State private var revokingShare = false
+    @State private var shareError: String?
 
     var body: some View {
         NavigationStack {
@@ -137,6 +141,36 @@ struct ConnectionInfoView: View {
                         .font(.footnote)
                         .textSelection(.enabled)
                     Button("退出连接", role: .destructive) { session.disconnect() }
+                }
+                Section("位置分享 · 随时由你决定") {
+                    if checkingShare {
+                        ProgressView("正在检查分享状态…")
+                    } else if let sharedLocation {
+                        Label("已分享过一次位置 · 最多保留 24 小时", systemImage: "location.circle.fill")
+                            .foregroundStyle(LovePalette.accent)
+                        Text("有效期至 \(shareExpiry(sharedLocation.expiresAt))。分享成功后地图上的大卡片会收起。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button(role: .destructive) {
+                            Task { await revokeSharedLocation() }
+                        } label: {
+                            if revokingShare {
+                                ProgressView()
+                            } else {
+                                Label("撤回位置分享", systemImage: "location.slash")
+                            }
+                        }
+                        .disabled(revokingShare)
+                    } else {
+                        Label("当前没有有效的分享位置", systemImage: "location.slash")
+                            .foregroundStyle(.secondary)
+                        Text("要分享新位置，请回到「藏宝地图」点「分享这一次」。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let shareError {
+                        Text(shareError).font(.footnote).foregroundStyle(.red)
+                    }
                 }
                 Section("我们的秘密宇宙") {
                     NavigationLink {
@@ -151,6 +185,41 @@ struct ConnectionInfoView: View {
                 }
             }
             .navigationTitle("我们的设置")
+            .task { await refreshSharedLocation() }
+        }
+    }
+
+    private func shareExpiry(_ iso: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: iso) else {
+            return "分享后的 24 小时内"
+        }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    @MainActor
+    private func refreshSharedLocation() async {
+        guard let api = session.api else { return }
+        checkingShare = true
+        defer { checkingShare = false }
+        do {
+            sharedLocation = try await api.currentSharedLocation()
+            shareError = nil
+        } catch {
+            shareError = "暂时无法读取分享状态：\(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func revokeSharedLocation() async {
+        guard let api = session.api, !revokingShare else { return }
+        revokingShare = true
+        defer { revokingShare = false }
+        do {
+            try await api.revokeSharedLocation()
+            sharedLocation = nil
+            shareError = nil
+        } catch {
+            shareError = "撤回失败：\(error.localizedDescription)"
         }
     }
 }
@@ -174,6 +243,10 @@ struct TreasureMapView: View {
     @State private var waitingForFreshLocation = false
     @State private var sharedLocation: SharedLocation?
     @State private var shareMessage: String?
+    @State private var showEmptyHint = false
+    @State private var emptyHintID = UUID()
+    @State private var toastMessage: String?
+    @State private var toastID = UUID()
 
     var body: some View {
         NavigationStack {
@@ -225,59 +298,62 @@ struct TreasureMapView: View {
                         Text(notice).font(.footnote)
                             .padding(10).background(.white, in: RoundedRectangle(cornerRadius: 10))
                     }
-                    if treasure?.letters.isEmpty == true {
+                    if let toastMessage {
+                        Text(toastMessage)
+                            .font(.subheadline.weight(.medium))
+                            .padding(12)
+                            .frame(maxWidth: .infinity)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15))
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                    if showEmptyHint {
                         Text("地图还没有藏信。等哥哥先藏一封给你 ♡")
                             .font(.subheadline)
                             .padding(15)
                             .frame(maxWidth: .infinity)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15))
+                            .transition(.opacity)
                     }
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "location.circle.fill")
-                                .foregroundStyle(LovePalette.accent)
-                                .font(.title2)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("分享我的位置给 Finnian ♡")
-                                    .font(.subheadline.weight(.semibold))
-                                Text(sharedLocation == nil
-                                     ? "只在你按下分享时发送一次，绝不自动追踪。"
-                                     : "已分享最新位置 · 24 小时内有效")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                    // Once the server confirms a share, remove this large card entirely.
+                    // Revoke is always available in Settings → 位置分享.
+                    if sharedLocation == nil {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "location.circle.fill")
+                                    .foregroundStyle(LovePalette.accent)
+                                    .font(.title2)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("分享我的位置给 Finnian ♡")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("仅在你确认时分享这一次，不会自动追踪。")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
                             }
-                            Spacer(minLength: 0)
-                        }
-
-                        HStack(spacing: 10) {
                             Button {
                                 showingShareConfirmation = true
                             } label: {
                                 if sharingLocation || waitingForFreshLocation {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Label(sharedLocation == nil ? "分享这一次" : "重新分享", systemImage: "location.fill")
+                                    Label("分享这一次", systemImage: "location.fill")
                                 }
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(sharingLocation || waitingForFreshLocation)
 
-                            if sharedLocation != nil {
-                                Button("撤回分享", role: .destructive) {
-                                    Task { await revokeShare() }
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(sharingLocation || waitingForFreshLocation)
+                            if let shareMessage {
+                                Text(shareMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
-                        if let shareMessage {
-                            Text(shareMessage).font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                     HStack {
                         Label("\(treasure?.letters.count ?? 0) 封藏起来的心意", systemImage: "envelope")
                         Spacer()
@@ -359,7 +435,10 @@ struct TreasureMapView: View {
             locator.locate() // Only local map display; NO upload.
         }
         .onAppear {
-            Task { await loadSavedPlaces() } // After saving a spot in the Settings tab.
+            Task {
+                await loadSavedPlaces() // Refresh private pins after leaving Settings.
+                await refreshShareStatus() // Restore card when a share was revoked in Settings.
+            }
         }
         .confirmationDialog(
             "把此刻的位置分享给 Finnian？",
@@ -423,7 +502,8 @@ struct TreasureMapView: View {
         defer { sharingLocation = false }
         do {
             sharedLocation = try await api.shareLocationOnce(location)
-            shareMessage = "分享成功啦！仅保存最新位置，24 小时后自动失效。"
+            shareMessage = nil
+            showToast("分享成功啦 ♡ 位置有效 24 小时，想撤回去「设置」就好。")
         } catch {
             shareMessage = "发送失败：\(error.localizedDescription)"
         }
@@ -440,26 +520,45 @@ struct TreasureMapView: View {
     }
 
     @MainActor
-    private func revokeShare() async {
-        guard let api = session.api, !sharingLocation else { return }
-        sharingLocation = true
-        defer { sharingLocation = false }
-        do {
-            try await api.revokeSharedLocation()
-            sharedLocation = nil
-            shareMessage = "已经撤回。服务器不再保留这一条共享位置。"
-        } catch {
-            shareMessage = "撤回失败：\(error.localizedDescription)"
-        }
-    }
-
-    @MainActor
     private func loadSavedPlaces() async {
         guard let api = session.api else { return }
         do {
             savedPlaces = try await api.savedPlaces()
         } catch {
             // Private pins are optional; don't obscure other map content on network failure.
+        }
+    }
+
+    @MainActor
+    private func presentEmptyHint(when empty: Bool) {
+        let id = UUID()
+        emptyHintID = id
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showEmptyHint = empty
+        }
+        guard empty else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3.5))
+            guard emptyHintID == id else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
+                showEmptyHint = false
+            }
+        }
+    }
+
+    @MainActor
+    private func showToast(_ text: String) {
+        let id = UUID()
+        toastID = id
+        withAnimation(.easeInOut(duration: 0.2)) {
+            toastMessage = text
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard toastID == id else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
+                toastMessage = nil
+            }
         }
     }
 
@@ -472,6 +571,7 @@ struct TreasureMapView: View {
             let result = try await api.treasureMap()
             treasure = result
             error = nil
+            presentEmptyHint(when: result.letters.isEmpty)
             if let coordinate = result.stops.first.map({ CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
                 ?? result.letters.compactMap(\.coordinate).first {
                 camera = .region(MKCoordinateRegion(center: coordinate,
