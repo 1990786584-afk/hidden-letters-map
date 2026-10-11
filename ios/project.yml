@@ -19,6 +19,6 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "为了在藏宝地图里确认你是否已经抵达藏信地点。"
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "用于藏宝地图里确认到访地点；只有你主动点击「分享这一次」时，才会把当前坐标发送到私人服务器。"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
