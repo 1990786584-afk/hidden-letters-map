@@ -9,6 +9,7 @@ import webpush from "web-push";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { registerDateRoutes } from "./dates.js";
+import { registerDateCardRoutes } from "./date-cards.js";
 import { fileURLToPath } from "node:url";
 import { createBadge, createLetter, createMark, createStop, distanceM, lettersInReach, publicLetter, shouldRecordFrame, sortStops, visitAt } from "./letters.js";
 
@@ -138,6 +139,10 @@ app.use((req, res, next) => {
   res.redirect("/login.html");
 });
 registerDateRoutes(app, DATA_DIR); // 只有经过上方鉴权的请求才能看到私密相册
+registerDateCardRoutes(app, DATA_DIR, {
+  webhookUrl: process.env.DATE_CARD_WEBHOOK_URL,
+  webhookToken: process.env.DATE_CARD_WEBHOOK_TOKEN,
+}); // 邀请函与回执：同一套鉴权、私密持久化
 app.use(express.static(join(__dirname, "dist"))); // npm run build 的产物
 app.get("/", (_req, res) => res.status(503).type("text/plain").send("还没 build：先 npm run build"));
 
