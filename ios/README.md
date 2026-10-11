@@ -61,3 +61,16 @@ ZFxF 的第三个原生 tab 是「约会来信」。它会向已登录的 Node �
 首次连接：在 iPhone 的 ZFxF 登录页输入 `https://memory.ryanecho.xyz/zfxf`，并填写服务器本机 `/etc/zfxf-love-map.env` 里的 `PASSWORD`。旧版 iPhone App 也可以手动输入新地址，无需等待重新安装；新编译版本会自动预填该 URL。
 
 注意：现有 Cloudflare 代理的 `ryanecho.xyz` 不能作为已安全就绪的 ZFxF 地址，只有上述直连 HTTPS 主机通过了端到端验证。
+
+## 原生定位单次分享（2026-10-11）
+
+**地图自动定位不代表分享**。原生「藏宝地图」页面新增浅粉色「分享我的位置给 Finnian ♡」卡片。用户主动点击「分享这一次」，再在系统确认弹窗按「确认分享这一次」，才会读取新鲜的 `CLLocation` 并调用 `POST /api/location/share`。如果尚未获得定位，会再请求一次定位；20 秒内获取成功就发，失败提示重试。没有后台分享，也没有定时上报。
+
+- `GET /api/location/share`：显示是否有未过期的最近一次分享，`{ "shared": null }` 表示没有。
+- `POST /api/location/share`：发送 `{ "lat": ..., "lon": ..., "acc": ... }`，服务端基于**自己时钟**记录分享时间，覆盖上一次位置。
+- `DELETE /api/location/share`：立即撤回并从服务器上删除共享文件。
+- 每次分享 **24 小时有效**；过期后不再返回，而且后台定时清理硬盘文件。
+- 数据仅存于 `DATA_DIR/manual-location.json`（0600 权限），不会新增历史轨迹，不会触发藏宝到访，不调用外部位置服务。已授权的用户/Agent 才能通过同一套服务器凭据读取。
+- MCP 新增 `shared_location`，可供配置好的 AI 客户端读取有效的主动分享。当前普通 ChatGPT 对话不会被自动推送实时坐标；需要请求时通过已连接的私有 VPS 或 Agent 工具读取。
+- 验证 `https://memory.ryanecho.xyz/zfxf/api/location/share`：无密码 401，有密码 GET 200，非法坐标 POST 400；服务端 JS 20 项测试全部通过。**只有重新安装新原生版本后，手机才能显示这个按钮。**
+
