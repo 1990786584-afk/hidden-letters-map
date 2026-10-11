@@ -74,7 +74,7 @@ struct DateBoardView: View {
                 .padding(.horizontal, 18)
                 .padding(.bottom, 45)
             }
-            .background(Color(red: 0.98, green: 0.94, blue: 0.95))
+            .background(LovePalette.background)
             .navigationTitle("约会纪念册")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button { Task { await refresh() } } label: { Image(systemName: "arrow.clockwise") } }
@@ -115,8 +115,8 @@ struct AuthenticatedPhoto: View {
             if let image {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
-                Rectangle().fill(Color(red: 0.95, green: 0.86, blue: 0.89))
-                    .overlay { ProgressView().tint(.pink) }
+                Rectangle().fill(LovePalette.blush)
+                    .overlay { ProgressView().tint(LovePalette.accent) }
             }
         }
         .clipped()
@@ -136,8 +136,8 @@ struct DatePostcard: View {
                 if let name = memory.photos.first {
                     AuthenticatedPhoto(filename: name)
                 } else {
-                    Rectangle().fill(Color(red: 0.96, green: 0.89, blue: 0.91))
-                        .overlay { Text("♡").font(.system(size: 58, design: .serif)).foregroundStyle(.pink.opacity(0.65)) }
+                    Rectangle().fill(LovePalette.blush)
+                        .overlay { Text("♡").font(.system(size: 58, design: .serif)).foregroundStyle(LovePalette.accent.opacity(0.65)) }
                 }
             }
             .frame(height: 145)
@@ -191,7 +191,7 @@ struct DateDetailView: View {
                 }
                 .padding(20)
             }
-            .background(Color(red: 0.98, green: 0.94, blue: 0.95))
+            .background(LovePalette.background)
             .navigationTitle("这一天 ♡")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("完成") { dismiss() } }
