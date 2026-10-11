@@ -372,3 +372,30 @@
 
 /* 插画区里的 SVG 容器 */
 .lm-ill > .art, .lm-sh-ill > .art { display: block; height: 100%; }
+
+/* ── ZFxF：赴约与我们的信箱（沿用地图原本的纸张/封蜡配色） ── */
+.lm-head-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.lm-inbox-btn { font: 500 25px/1 Georgia, serif; color: var(--lm-plum); }
+.lm-nav-go { text-decoration: none; background: var(--lm-paper-hi); border: 1px solid var(--lm-accent); color: var(--lm-accent-deep); box-sizing: border-box; box-shadow: none; }
+.lm-inbox-bg { position: absolute; inset: 0; z-index: 12; background: rgba(76,54,61,.28); animation: lm-fade-in .25s ease-out; }
+.lm-inbox-sheet { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; box-sizing: border-box;
+  max-height: 84%; overflow-y: auto; padding: 24px 20px calc(var(--lm-safe-bot) + 26px); border-radius: 18px 18px 0 0;
+  background: var(--lm-grain), var(--lm-paper); border-top: 1px solid var(--lm-rule);
+  box-shadow: var(--lm-shadow-lg); animation: lm-drawer-in .42s cubic-bezier(.2,.9,.3,1); }
+.lm-inbox-sheet .lm-x { top: 20px; right: 16px; }
+.lm-inbox-overline { margin: 0; color: var(--lm-muted); font: italic 17px/1.2 var(--lm-en); }
+.lm-inbox-sheet h2 { margin: 8px 0 0; font: 400 25px/1.3 var(--lm-cn); letter-spacing: .15em; }
+.lm-inbox-sheet h2 span { font: 22px/1 Georgia, serif; color: var(--lm-accent); }
+.lm-inbox-intro { color: var(--lm-muted); font: 400 13px/1.8 var(--lm-hand); margin: 10px 0 14px; }
+.lm-inbox-tabs { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; padding-bottom: 12px; border-bottom: 1px solid var(--lm-rule); }
+.lm-inbox-tabs button { border: 1px solid var(--lm-rule); border-radius: 20px; flex: none; padding: 7px 11px; color: var(--lm-muted); font-size: 12px; }
+.lm-inbox-tabs button.on { color: var(--lm-accent-deep); background: var(--lm-accent-soft); border-color: var(--lm-accent); }
+.lm-inbox-list { overflow-y: auto; min-height: 90px; }
+.lm-inbox-letter { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px 2px !important; border-bottom: 1px solid var(--lm-rule) !important; }
+.lm-inbox-symbol { width: 44px; height: 44px; flex: none; display: grid; place-items: center; font-size: 22px; border-radius: 11px; background: var(--lm-paper-hi); color: var(--lm-accent); }
+.lm-inbox-desc { flex: 1; min-width: 0; text-align: left; }
+.lm-inbox-desc strong { display: block; font: 500 16px/1.5 var(--lm-cn); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-inbox-desc small { display: block; font: 400 12px/1.8 var(--lm-hand); color: var(--lm-muted); }
+.lm-inbox-empty { padding: 18px 0; font: 400 14px/1.7 var(--lm-hand); color: var(--lm-muted); text-align: center; }
+.lm-inbox-export { align-self: center; margin-top: 18px; color: var(--lm-accent-deep); font: 400 13px/1.5 var(--lm-hand); }
+.lm-inbox-backup { color: var(--lm-muted); text-align: center; font: 400 11px/1.5 var(--lm-cn); margin: 8px 0 0; }
