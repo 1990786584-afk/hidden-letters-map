@@ -135,11 +135,11 @@ const TOOLS = [
   },
   {
     name: "hide_at_saved_place",
-    description: "Hide a genuine ZFxF letter at an existing private saved place by its exact alias, without geocoding private addresses. For a nearby walking surprise, pass near_alias (e.g. 家) AND select a separately saved safe public 'walk' place within max_distance_m; do not generate a random street coordinate or promise walkability solely from straight-line distance. Tell the user a new map surprise awaits only AFTER tool succeeds. On iPhone, unlocking still requires fresh GPS at the actual destination; user's '我在家' never counts as proof of arrival.",
+    description: "Hide a genuine ZFxF letter at an existing private saved destination alias (家/学校/迪士尼). For a short walking surprise, provide near_alias=家 and OMIT alias: automatically select a separately saved reachable public walk spot 100–800m away, preferring one without an existing sealed letter. Never make up coordinates or put surprises on random roads. Optional alias selects a specific saved destination. Tell the user only AFTER successful creation. GPS at destination is still needed to unlock.",
     inputSchema: {
       type: "object",
       properties: {
-        alias: { type: "string", description: "Exact saved destination name, e.g. 楼下公园" },
+        alias: { type: "string", description: "Optional exact saved destination name; omit when near_alias is set to auto-pick a nearby saved public walk point." },
         near_alias: { type: "string", description: "Optional originating alias, e.g. 家. If specified, destination must be a separate 'walk' place nearby." },
         max_distance_m: { type: "number", description: "Optional straight-line walking target maximum, 100..2000m, default 800m. Does not guarantee real walking-route distance." },
         hint: { type: "string", description: "A riddle for the sealed envelope" },
@@ -150,7 +150,7 @@ const TOOLS = [
         badge_emoji: { type: "string" },
         badge_note: { type: "string" }
       },
-      required: ["alias", "hint"]
+      required: ["hint"]
     }
   },
   {
@@ -197,18 +197,31 @@ async function callTool(name, args) {
   if (name === "hide_at_saved_place") {
     const { places } = await http("GET", "/api/places");
     const alias = String(args.alias || "").trim();
-    const place = places.find(p => p.label.normalize("NFKC").toLowerCase() === alias.normalize("NFKC").toLowerCase());
-    if (!place) throw new Error(`私人地点「${alias}」还没保存，请先让念念在 ZFxF 里保存，不能猜坐标。`);
-    if (args.near_alias) {
-      const near = String(args.near_alias).trim();
-      const origin = places.find(p => p.label.normalize("NFKC").toLowerCase() === near.normalize("NFKC").toLowerCase());
-      if (!origin) throw new Error("作为出发点的私人地点还未保存");
+    const nearAlias = String(args.near_alias || "").trim();
+    const matching = value => places.find(p => p.label.normalize("NFKC").toLowerCase() === value.normalize("NFKC").toLowerCase());
+    const origin = nearAlias ? matching(nearAlias) : null;
+    if (nearAlias && !origin) throw new Error("出发地点还没保存。请念念先在 ZFxF 设置里添加，不要猜家庭坐标。");
+    const max = Math.min(2000, Math.max(100, Number(args.max_distance_m) || 800));
+    let place = alias ? matching(alias) : null;
+    if (alias && !place) throw new Error(`私人地点「${alias}」还没保存，请先让念念在 ZFxF 里保存，不能猜坐标。`);
+    if (!place && origin) {
+      const map = await http("GET", "/api/travel-map/full");
+      const sealed = (map.letters || []).filter(l => l.status === "sealed");
+      const candidates = places.filter(p => p.id !== origin.id && p.kind === "walk")
+        .map(p => ({...p, distance: Math.round(distanceM(p, origin))}))
+        .filter(p => p.distance >= 100 && p.distance <= max)
+        .sort((a,b) => a.distance-b.distance);
+      const unused = candidates.filter(p => !sealed.some(l => distanceM(l,p) < 60));
+      place = unused[0] || candidates[0] || null;
+      if (!place) throw new Error(`「${origin.label}」附近尚无 100～${max} 米内保存的安全散步点。先在 App 添加一个公园/步道，才好藏惊喜。`);
+    }
+    if (!place) throw new Error("请指定 alias，或提供 near_alias 让我从已保存的散步地点中挑选。");
+    if (origin) {
       if (place.id === origin.id || place.kind !== "walk")
-        throw new Error("散步惊喜需要选一个独立保存的、已确认可安全步行到达的地点（类型：适合散步）");
-      const max = Math.min(2000, Math.max(100, Number(args.max_distance_m) || 800));
+        throw new Error("散步惊喜需要选一个独立保存的、已确认适合步行的地点（类型：适合散步）");
       const away = Math.round(distanceM(place, origin));
       if (away < 100 || away > max)
-        throw new Error(`这个步行目标与出发地直线相距约 ${away} 米，不在 100～${max} 米的适用范围。`);
+        throw new Error(`这个目标与出发地直线相距约 ${away} 米，不在 100～${max} 米的适用范围。`);
     }
     const badge = args.badge_name ? { name: args.badge_name, emoji: args.badge_emoji, note: args.badge_note } : null;
     if (!String(args.letter || "").trim() && !badge) throw new Error("至少要藏一封信或一枚成就");
