@@ -161,7 +161,7 @@ const tearIcon = (html, big) => L.divIcon({ className: "", html, iconSize: big ?
 const smIcon = (html) => L.divIcon({ className: "", html, iconSize: [40, 50], iconAnchor: [20, 47.5] });
 const PAD_SHEET = { paddingTopLeft: [30, 250], paddingBottomRight: [30, 470], maxZoom: 16, duration: 0.8 };
 
-export default function LettersPage() {
+export default function LettersPage({ onShowDates }) {
   const { data, mutate } = useSWR("travel-map", api.travelMap);
   if (data?.names) Object.assign(NAMES, data.names);
   const [push, setPush] = useState("default"); // 推送：unsupported / denied / default / subscribed
@@ -441,9 +441,11 @@ export default function LettersPage() {
             <p className="sub">{letters.length ? <><b>{sealedCount}</b> 处还藏着<i /><b>{foundCount}</b> 处找到了</> : `${NAMES.hider}还没开始藏东西`}</p>
           </div>
         </div>
+        <div className="lm-head-actions"><button type="button" className="lm-dates-link" onClick={onShowDates}>约会板 ♡</button>
         <button type="button" className="lm-wall-btn" aria-label="成就墙" onClick={() => setWall(true)}>
           <span className="lm-mini-coin">★</span>{earned.length > 0 && <b>{earned.length}</b>}
         </button>
+        </div>
       </header>
       {days.length > 0 && (
         <nav className="lm-chips" aria-label="旅程站点">
