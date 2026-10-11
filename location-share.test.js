@@ -19,7 +19,7 @@ test("manual sharing accepts explicit action only, returns latest, supports dele
   t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const app = express();
   app.use(express.json());
-  app.use((req,res,next)=>req.get("authorization") === "Bearer test" ? next() : res.sendStatus(401));
+  app.use((req,res,next)=>req.get("authorization") === "Bearer test" ? next() : res.status(401).json({error:"unauthorized"}));
   registerManualLocationRoutes(app,dir);
   const server = await new Promise(resolve => { const s = app.listen(0,"127.0.0.1",()=>resolve(s)); });
   t.after(()=>new Promise(resolve=>server.close(resolve)));
