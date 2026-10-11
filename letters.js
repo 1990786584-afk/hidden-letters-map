@@ -45,7 +45,10 @@ function normalizeBadge(b) {
 }
 
 // 一个地点能藏的：信（body）/ 语音（voice = { url, text }，自己准备好的音频地址）/ 成就（badge），至少一样
-export function createLetter({ place, lat, lon, radiusM, hint, body, voice, badge, visitsNeeded }, { now = Date.now(), rand = Math.random } = {}) {
+export function createLetter({ place, lat, lon, radiusM, hint, body, voice, badge, visitsNeeded, mode = "appointment" }, { now = Date.now(), rand = Math.random } = {}) {
+  // 新信分为赴约（公开精确坐标）与偶遇（路过才出现）。
+  // 历史未带 mode 的老信在 publicLetter 中仍按旧版迷雾地图处理。
+  if (!["appointment", "encounter"].includes(mode)) throw new Error("mode 只能是 appointment 或 encounter");
   const pos = coords(lat, lon);
   const text = { place: String(place || "").trim(), hint: String(hint || "").trim(), body: String(body || "").trim() };
   if (!text.place || !text.hint) throw new Error("place / hint 都要有");
@@ -55,6 +58,7 @@ export function createLetter({ place, lat, lon, radiusM, hint, body, voice, badg
   const r = Math.min(20000, Math.max(50, Math.round(Number(radiusM) || 200)));
   return {
     id: newId("letter", now, rand),
+    mode,
     ...text,
     voice: v,
     badge: b,
@@ -141,10 +145,15 @@ export function visitAt(letters, pos, { now = Date.now(), tz } = {}) {
 // 寻宝人的页面拿到的样子：还封着的只给模糊圈、谜语、藏了哪几样——没有地名、坐标、内容，开发者工具里也偷看不到；
 // 找到了才给地名和真实位置；拆开了才给信、语音、成就、街景。
 export function publicLetter(l) {
-  const base = { id: l.id, status: l.status, hint: l.hint, area: l.area, contents: contentsOf(l), createdAt: l.createdAt };
+  const mode = l.mode || "legacy"; // 旧数据默认保持“模糊圈找信”玩法，不擅自暴露其地点
+  const base = { id: l.id, mode, status: l.status, hint: l.hint, contents: contentsOf(l), createdAt: l.createdAt };
   if ((l.visitsNeeded || 1) > 1) Object.assign(base, { visits: (l.visitDays || []).length, visitsNeeded: l.visitsNeeded });
-  if (l.status === "sealed") return base;
-  const found = { ...base, place: l.place, lat: l.lat, lon: l.lon, foundAt: l.foundAt };
+  if (l.status === "sealed") {
+    if (mode === "encounter") return null; // 真正的偶遇：地图、附近列表和接口都不能预先看到
+    if (mode === "appointment") return { ...base, place: l.place, lat: l.lat, lon: l.lon, radiusM: l.radiusM };
+    return { ...base, area: l.area }; // 历史“谜语 + 模糊圈”信件兼容
+  }
+  const found = { ...base, place: l.place, lat: l.lat, lon: l.lon, foundAt: l.foundAt, foundBy: l.foundBy || null };
   if (l.status === "found") return found;
   const streetView = l.streetView ? { url: `/api/travel-map/letters/${l.id}/streetview.jpg`, date: l.streetView.date || null } : null;
   return { ...found, body: l.body, voice: l.voice || null, badge: l.badge || null, streetView, openedAt: l.openedAt };

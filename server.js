@@ -101,13 +101,18 @@ function ingestFrame({ lat, lon, acc, t }) {
   const map = readMap();
   const changes = visitAt(map.letters, frame, { now: Date.parse(frame.t) });
   if (!changes.length) return;
+  const discovered = [];
   for (const { letter, event } of changes) {
     if (event === "visit") { console.log(`[letters] 今天来过「${letter.place}」（${letter.visitDays.length}/${letter.visitsNeeded}）`); continue; }
     letter.foundBy = "track";
     console.log(`[letters] 走到了「${letter.place}」，到手`);
-    pushAll(`📮 ${NAMES.hider}藏的东西`, `你走到了${letter.place}附近，这里有${NAMES.hider}留给你的东西`).catch(() => {});
+    discovered.push(letter);
   }
+  // 永远先保存发现记录，再尝试发送通知：免打扰/离线/推送失败都不会丢信。
   writeMap(map);
+  for (const letter of discovered) {
+    pushAll("💌 你偶遇了一封信", `在${letter.place}附近，有一封信在等你。错过通知也能在信箱里读。`).catch(() => {});
+  }
 }
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
@@ -143,7 +148,15 @@ app.get("/", (_req, res) => res.status(503).type("text/plain").send("还没 buil
 app.get("/api/travel-map", (_req, res) => {
   const { stops, letters, badges, marks } = readMap();
   const track = readTrack(Date.now() - 60 * 86400e3).map(({ t, lat, lon }) => ({ t, lat, lon }));
-  res.json({ names: NAMES, stops: sortStops(stops), letters: letters.map(publicLetter), badges, marks, seen: readJson(SEEN_FILE, null), track });
+  res.json({ names: NAMES, stops: sortStops(stops), letters: letters.map(publicLetter).filter(Boolean), badges, marks, seen: readJson(SEEN_FILE, null), track });
+});
+
+// 永久信箱的可迁移副本：导出已经收到的信，不包含任何尚未发现的惊喜。
+// 这是主动备份工具；VPS 停服前仍应另存云端，不代表服务端已经异地备份。
+app.get("/api/mailbox/export", (_req, res) => {
+  const received = readMap().letters.filter((l) => l.status === "found" || l.status === "opened").map(publicLetter);
+  res.attachment("ZFxF-received-letters.json");
+  res.json({ exportedAt: new Date().toISOString(), count: received.length, letters: received });
 });
 
 // 藏宝人（MCP / curl）看全貌：藏过哪些、写了什么、拆没拆

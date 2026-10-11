@@ -37,6 +37,7 @@ test("createLetter：半径夹在 50–20000，默认 200，缺字段报错", ()
   assert.equal(createLetter(base).status, "sealed");
   assert.throws(() => createLetter({ ...base, hint: " " }));
   assert.throws(() => createLetter({ ...base, lat: 200 }));
+  assert.throws(() => createLetter({ ...base, mode: "unlisted" }), /mode/);
 });
 
 test("一个地点可以只藏语音或只藏成就，但不能什么都不藏", () => {
@@ -82,6 +83,8 @@ test("visitAt：普通的走到就找到；健身房那种一天记一次，攒�
   const once = createLetter({ place: "p", ...CASA_AZUL, hint: "h", body: "b" });
   assert.deepEqual(visitAt([once], here, { now: t0, tz }).map((x) => x.event), ["found"]);
   assert.equal(once.status, "found");
+  assert.equal(publicLetter({ ...once, mode: "encounter" }).status, "found", "偶遇经过后进入信箱");
+  assert.ok(once.foundAt, "发现时间必须保留下来");
 
   const gym = createLetter({ place: "健身房", ...CASA_AZUL, hint: "h", badge: { name: "健身房常客" }, visitsNeeded: 3 });
   assert.deepEqual(visitAt([gym], here, { now: t0, tz }).map((x) => x.event), ["visit"]);
@@ -96,12 +99,20 @@ test("visitAt：普通的走到就找到；健身房那种一天记一次，攒�
   assert.equal(publicLetter(once).visitsNeeded, undefined, "普通的不带进度");
 });
 
-test("publicLetter：封着的只说藏了哪几样，找到给位置，拆开才给信 / 语音 / 成就", () => {
+test("publicLetter：赴约公开地点但保密正文，偶遇在发现前完全不露面，历史信不变", () => {
   const letter = { ...createLetter({ place: "蓝房子", ...CASA_AZUL, hint: "谜语", body: "正文", voice: { url: "/v.m4a", text: "t" }, badge: { name: "成就" } }), streetView: { file: "x.jpg", date: "2024-03" } };
   const sealed = publicLetter(letter);
-  for (const k of ["place", "lat", "lon", "body", "radiusM", "voice", "badge", "streetView"]) assert.ok(!(k in sealed), `sealed leaks ${k}`);
+  assert.equal(sealed.mode, "appointment");
+  assert.equal(sealed.place, "蓝房子");
+  assert.deepEqual([sealed.lat, sealed.lon], [CASA_AZUL.lat, CASA_AZUL.lon]);
+  assert.equal(sealed.radiusM, 200);
+  for (const k of ["body", "voice", "badge", "streetView"]) assert.ok(!(k in sealed), `sealed leaks ${k}`);
   assert.equal(sealed.hint, "谜语");
   assert.deepEqual(sealed.contents, ["letter", "voice", "badge"]);
+  assert.equal(publicLetter({ ...letter, mode: "encounter" }), null, "偶遇未发现前不进入 API");
+  const legacy = publicLetter({ ...letter, mode: undefined });
+  for (const k of ["place", "lat", "lon", "body"]) assert.ok(!(k in legacy), `legacy leaks ${k}`);
+  assert.ok(legacy.area, "老信保持原来的谜语迷雾圈");
   const found = publicLetter({ ...letter, status: "found" });
   assert.equal(found.place, "蓝房子");
   for (const k of ["body", "voice", "badge", "streetView"]) assert.ok(!(k in found), `found leaks ${k}`);
