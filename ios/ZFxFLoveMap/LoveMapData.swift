@@ -400,29 +400,93 @@ final class LoveMapSession: ObservableObject {
 final class TreasureLocation: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     @Published var location: CLLocation?
+    @Published var headingDegrees: CLLocationDirection?
     @Published var notice: String?
+    private var navigationRequested = false
 
     override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 5
+        manager.headingFilter = 5
     }
+
+    // One-off GPS for other screens and a deliberate "share this once" action.
+    // No network request is made by this location manager.
     func locate() {
         switch manager.authorizationStatus {
-        case .notDetermined: manager.requestWhenInUseAuthorization()
-        case .authorizedAlways, .authorizedWhenInUse: manager.requestLocation()
-        default: notice = "请在 iPhone 设置里允许定位，才能在到达地点时拆信。"
-        }
-    }
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
             manager.requestLocation()
+        default:
+            notice = "请在 iPhone 设置中允许 ZFxF 使用期间定位，地图才能显示你的蓝点。"
         }
     }
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let newest = locations.last { location = newest; notice = nil }
+
+    // Active only while the treasure map is visible, not background tracking.
+    func startNavigation() {
+        navigationRequested = true
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            beginUpdates()
+        default:
+            notice = "请在 iPhone 设置中允许 ZFxF 使用期间定位，地图才能显示你的蓝点。"
+        }
     }
+
+    func stopNavigation() {
+        navigationRequested = false
+        manager.stopUpdatingLocation()
+        manager.stopUpdatingHeading()
+    }
+
+    private func beginUpdates() {
+        manager.startUpdatingLocation()
+        if CLLocationManager.headingAvailable() {
+            manager.startUpdatingHeading()
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            notice = nil
+            if navigationRequested {
+                beginUpdates()
+            } else {
+                manager.requestLocation()
+            }
+        case .denied, .restricted:
+            notice = "定位未授权：请在 iPhone 设置中允许 ZFxF 使用期间定位。"
+        default:
+            break
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let newest = locations.last(where: {
+            $0.horizontalAccuracy >= 0 &&
+            CLLocationCoordinate2DIsValid($0.coordinate)
+        }) else { return }
+        location = newest
+        notice = nil
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading heading: CLHeading) {
+        guard heading.headingAccuracy >= 0 else { return }
+        let degrees = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+        if degrees >= 0 {
+            headingDegrees = degrees
+        }
+    }
+
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        notice = "暂时没有拿到位置，等一会儿再试试。"
+        // Transient locationUnknown errors during continuous walking updates are normal.
+        if let error = error as? CLError, error.code == .locationUnknown { return }
+        notice = "暂时没有拿到定位，请检查定位权限或再试一次。"
     }
 }
