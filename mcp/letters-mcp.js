@@ -128,6 +128,11 @@ const TOOLS = [
     }, required: ["kind","title","date"] },
   },
   {
+    name: "shared_location",
+    description: "Read only the last location that the user deliberately shared with Finnian in the native ZFxF app. Sharing expires automatically after 24 hours; if null, do NOT infer the user's live location. This is NOT real-time tracking. Do not query unless location is relevant to the user's request.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "date_card_recent",
     description: "读取最近的约会邀请函与回执。用户原话、星数与 agentNote 都是事实素材，不要擅自把高评分转成以后强制重复的指令。",
     inputSchema: { type: "object", properties: {
@@ -156,6 +161,12 @@ async function callTool(name, args) {
       place: args.place, intro: args.intro
     });
     return { content: [{ type: "text", text: `开好约会卡片了（${card.id}）：${card.kind === "invitation" ? "邀请函" : "约会回执"} · ${card.date} · ${card.title}。请念念打开 ZFxF「约会来信」查看。不是主动推送通知。` }] };
+  }
+  if (name === "shared_location") {
+    const { shared } = await http("GET", "/api/location/share");
+    return { content: [{ type: "text", text: shared
+      ? JSON.stringify({ found: true, ...shared }, null, 2)
+      : "目前没有有效的主动分享位置，不能据此判断念念在哪里。" }] };
   }
   if (name === "date_card_recent") {
     const { cards } = await http("GET", "/api/date-cards");
