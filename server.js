@@ -8,6 +8,7 @@ import express from "express";
 import webpush from "web-push";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { registerDateRoutes } from "./dates.js";
 import { fileURLToPath } from "node:url";
 import { createBadge, createLetter, createMark, createStop, distanceM, lettersInReach, publicLetter, shouldRecordFrame, sortStops, visitAt } from "./letters.js";
 
@@ -112,7 +113,7 @@ function ingestFrame({ lat, lon, acc, t }) {
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
 const app = express();
-app.use(express.json({ limit: "2mb" })); // Overland 一次能攒几百帧
+app.use(express.json({ limit: "12mb" })); // 约会板照片先压缩再上传，最多 4 张；原定位接口保持兼容
 
 // 三种带密码的方式：页面的 cookie、MCP / Overland 的 Bearer、OwnTracks 的 HTTP Basic（用户名随便，密码对就行）
 function authed(req) {
@@ -136,6 +137,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) return res.status(401).json({ error: "unauthorized" });
   res.redirect("/login.html");
 });
+registerDateRoutes(app, DATA_DIR); // 只有经过上方鉴权的请求才能看到私密相册
 app.use(express.static(join(__dirname, "dist"))); // npm run build 的产物
 app.get("/", (_req, res) => res.status(503).type("text/plain").send("还没 build：先 npm run build"));
 
