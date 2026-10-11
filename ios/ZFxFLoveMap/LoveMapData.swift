@@ -414,6 +414,14 @@ final class LoveMapSession: ObservableObject {
         return LoveMapAPI(root: url, token: SecretStore.load())
     }
 
+    // A geofence can relaunch this app while the phone is locked.
+    // Keychain's WhenUnlockedThisDeviceOnly item may be unavailable until the
+    // next foreground unlock; restore the logged-in state without another prompt.
+    func refreshStoredConnection() {
+        guard !connected, serverAddress.hasPrefix("https://") else { return }
+        if !SecretStore.load().isEmpty { connected = true }
+    }
+
     func connect(address: String, password: String) async {
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: trimmed), url.scheme == "https", url.host != nil else {
