@@ -25,6 +25,8 @@ struct RootView: View {
                         .tabItem { Label("藏宝地图", systemImage: "map") }
                     DateBoardView()
                         .tabItem { Label("约会板", systemImage: "heart.text.square") }
+                    DateCardsView()
+                        .tabItem { Label("约会来信", systemImage: "envelope.badge") }
                     ConnectionInfoView()
                         .tabItem { Label("设置", systemImage: "gearshape") }
                 }
