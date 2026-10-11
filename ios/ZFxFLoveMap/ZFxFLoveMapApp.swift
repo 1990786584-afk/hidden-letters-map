@@ -138,6 +138,13 @@ struct ConnectionInfoView: View {
                         .textSelection(.enabled)
                     Button("退出连接", role: .destructive) { session.disconnect() }
                 }
+                Section("我们的秘密宇宙") {
+                    NavigationLink {
+                        SavedPlacesView()
+                    } label: {
+                        Label("秘密地点 · 家 / 学校 / 散步点", systemImage: "mappin.and.ellipse")
+                    }
+                }
                 Section("关于 ZFxF") {
                     Text("藏宝地图、约会板、回忆照片。")
                     Text("导航和地铁到站提醒暂时不做。")
@@ -156,6 +163,7 @@ struct TreasureMapView: View {
                            span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08))
     )
     @State private var treasure: TreasureMap?
+    @State private var savedPlaces: [SavedPlace] = []
     @State private var selected: HiddenLetter?
     @State private var error: String?
     @State private var loading = false
@@ -187,6 +195,15 @@ struct TreasureMapView: View {
                                     }
                                     .accessibilityLabel(letter.isSealed ? "未解锁的信" : letter.place ?? "已解锁的信")
                                 }
+                            }
+                        }
+                        ForEach(savedPlaces) { place in
+                            Annotation(place.label, coordinate: place.coordinate) {
+                                Image(systemName: place.kind == "home" ? "house.circle.fill" :
+                                      (place.kind == "school" ? "graduationcap.circle.fill" : "mappin.circle.fill"))
+                                    .font(.title2)
+                                    .foregroundStyle(LovePalette.accent, .white)
+                                    .accessibilityLabel("私人地点：\(place.label)")
                             }
                         }
                         ForEach(treasure.stops) { stop in
@@ -284,7 +301,7 @@ struct TreasureMapView: View {
             .navigationTitle("藏宝地图 ♡")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                Button { Task { await loadMap() } } label: {
+                Button { Task { await loadMap(); await loadSavedPlaces() } } label: {
                     if loading { ProgressView() }
                     else { Image(systemName: "arrow.clockwise") }
                 }
@@ -337,8 +354,12 @@ struct TreasureMapView: View {
         }
         .task {
             await loadMap()
+            await loadSavedPlaces()
             await refreshShareStatus()
             locator.locate() // Only local map display; NO upload.
+        }
+        .onAppear {
+            Task { await loadSavedPlaces() } // After saving a spot in the Settings tab.
         }
         .confirmationDialog(
             "把此刻的位置分享给 Finnian？",
@@ -429,6 +450,16 @@ struct TreasureMapView: View {
             shareMessage = "已经撤回。服务器不再保留这一条共享位置。"
         } catch {
             shareMessage = "撤回失败：\(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func loadSavedPlaces() async {
+        guard let api = session.api else { return }
+        do {
+            savedPlaces = try await api.savedPlaces()
+        } catch {
+            // Private pins are optional; don't obscure other map content on network failure.
         }
     }
 
