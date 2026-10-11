@@ -140,6 +140,39 @@ struct SharedLocationResponse: Decodable {
     let shared: SharedLocation?
 }
 
+// User-owned aliases such as 家、学校、迪士尼 or a familiar public walking stop.
+struct SavedPlace: Codable, Identifiable {
+    let id: String
+    let label: String
+    let kind: String
+    let lat: Double
+    let lon: Double
+    let note: String
+    let createdAt: String
+
+    var coordinate: CLLocationCoordinate2D {
+        .init(latitude: lat, longitude: lon)
+    }
+}
+
+struct SavedPlacesResult: Decodable {
+    let places: [SavedPlace]
+}
+struct SavedPlaceResult: Decodable {
+    let ok: Bool
+    let place: SavedPlace
+}
+struct SavePlacePayload: Encodable {
+    let label: String
+    let kind: String
+    let lat: Double
+    let lon: Double
+    let note: String
+}
+struct SimpleActionResult: Decodable {
+    let ok: Bool
+}
+
 struct LetterOpenPayload: Encodable {
     let lat: Double
     let lon: Double
@@ -224,6 +257,32 @@ struct LoveMapAPI {
         let data = try await requestData(path: "/api/location/share", method: "DELETE")
         let result = try JSONDecoder().decode(SharedLocationResponse.self, from: data)
         guard result.ok == true && result.shared == nil else { throw LoveMapError.invalidResponse }
+    }
+
+    func savedPlaces() async throws -> [SavedPlace] {
+        let result: SavedPlacesResult = try await get("/api/places")
+        return result.places
+    }
+
+    func createSavedPlace(_ payload: SavePlacePayload) async throws -> SavedPlace {
+        let result: SavedPlaceResult = try await post("/api/places", payload: payload)
+        return result.place
+    }
+
+    func updateSavedPlace(id: String, payload: SavePlacePayload) async throws -> SavedPlace {
+        let data = try await requestData(
+            path: "/api/places/\(id)", method: "PUT",
+            body: try JSONEncoder().encode(payload)
+        )
+        let result = try JSONDecoder().decode(SavedPlaceResult.self, from: data)
+        return result.place
+    }
+
+    func deleteSavedPlace(id: String) async throws {
+        let data = try await requestData(path: "/api/places/\(id)", method: "DELETE")
+        guard try JSONDecoder().decode(SimpleActionResult.self, from: data).ok else {
+            throw LoveMapError.invalidResponse
+        }
     }
 
     func treasureMap() async throws -> TreasureMap { try await get("/api/travel-map") }
