@@ -15,6 +15,7 @@
 //   remove_from_map({ id })
 
 import readline from "node:readline";
+import { distanceM } from "../letters.js";
 
 const LETTERS_URL = (process.env.LETTERS_URL || "http://localhost:3000").replace(/\/$/, "");
 const PASSWORD = process.env.LETTERS_PASSWORD || "";
@@ -128,6 +129,31 @@ const TOOLS = [
     }, required: ["kind","title","date"] },
   },
   {
+    name: "list_saved_places",
+    description: "Read the user's explicitly saved private aliases (e.g. 家 / 学校 / 上海迪士尼 / 楼下公园) from ZFxF. Returns names, kinds, and optional walking notes, NOT coordinates. These are remembered reference locations, NOT proof of where the user is right now. Use after the user refers to a saved location or asks for a walk surprise. If they say '我在家', understand that as their report, not live location tracking.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "hide_at_saved_place",
+    description: "Hide a genuine ZFxF letter at an existing private saved place by its exact alias, without geocoding private addresses. For a nearby walking surprise, pass near_alias (e.g. 家) AND select a separately saved safe public 'walk' place within max_distance_m; do not generate a random street coordinate or promise walkability solely from straight-line distance. Tell the user a new map surprise awaits only AFTER tool succeeds. On iPhone, unlocking still requires fresh GPS at the actual destination; user's '我在家' never counts as proof of arrival.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        alias: { type: "string", description: "Exact saved destination name, e.g. 楼下公园" },
+        near_alias: { type: "string", description: "Optional originating alias, e.g. 家. If specified, destination must be a separate 'walk' place nearby." },
+        max_distance_m: { type: "number", description: "Optional straight-line walking target maximum, 100..2000m, default 800m. Does not guarantee real walking-route distance." },
+        hint: { type: "string", description: "A riddle for the sealed envelope" },
+        letter: { type: "string", description: "Hidden message; at least letter or badge_name required" },
+        radius_m: { type: "number", description: "GPS unlock radius, 50–300m recommended" },
+        visits_needed: { type: "number", description: "Visits on distinct days to unlock; default 1" },
+        badge_name: { type: "string" },
+        badge_emoji: { type: "string" },
+        badge_note: { type: "string" }
+      },
+      required: ["alias", "hint"]
+    }
+  },
+  {
     name: "shared_location",
     description: "Read only the last location that the user deliberately shared with Finnian in the native ZFxF app. Sharing expires automatically after 24 hours; if null, do NOT infer the user's live location. This is NOT real-time tracking. Do not query unless location is relevant to the user's request.",
     inputSchema: { type: "object", properties: {} },
@@ -161,6 +187,37 @@ async function callTool(name, args) {
       place: args.place, intro: args.intro
     });
     return { content: [{ type: "text", text: `开好约会卡片了（${card.id}）：${card.kind === "invitation" ? "邀请函" : "约会回执"} · ${card.date} · ${card.title}。请念念打开 ZFxF「约会来信」查看。不是主动推送通知。` }] };
+  }
+  if (name === "list_saved_places") {
+    const { places } = await http("GET", "/api/places");
+    return { content: [{ type: "text", text: places.length ?
+      JSON.stringify(places.map(({ label, kind, note }) => ({ label, kind, note })), null, 2) :
+      "暂时没有保存任何私人地点。请念念在 ZFxF「设置 → 秘密地点」先保存；不能猜她的家庭/学校坐标。" }] };
+  }
+  if (name === "hide_at_saved_place") {
+    const { places } = await http("GET", "/api/places");
+    const alias = String(args.alias || "").trim();
+    const place = places.find(p => p.label.normalize("NFKC").toLowerCase() === alias.normalize("NFKC").toLowerCase());
+    if (!place) throw new Error(`私人地点「${alias}」还没保存，请先让念念在 ZFxF 里保存，不能猜坐标。`);
+    if (args.near_alias) {
+      const near = String(args.near_alias).trim();
+      const origin = places.find(p => p.label.normalize("NFKC").toLowerCase() === near.normalize("NFKC").toLowerCase());
+      if (!origin) throw new Error("作为出发点的私人地点还未保存");
+      if (place.id === origin.id || place.kind !== "walk")
+        throw new Error("散步惊喜需要选一个独立保存的、已确认可安全步行到达的地点（类型：适合散步）");
+      const max = Math.min(2000, Math.max(100, Number(args.max_distance_m) || 800));
+      const away = Math.round(distanceM(place, origin));
+      if (away < 100 || away > max)
+        throw new Error(`这个步行目标与出发地直线相距约 ${away} 米，不在 100～${max} 米的适用范围。`);
+    }
+    const badge = args.badge_name ? { name: args.badge_name, emoji: args.badge_emoji, note: args.badge_note } : null;
+    if (!String(args.letter || "").trim() && !badge) throw new Error("至少要藏一封信或一枚成就");
+    const { letter } = await http("POST", "/api/travel-map/letters", {
+      place: place.label, hint: args.hint, body: args.letter,
+      badge, radiusM: args.radius_m || 100, visitsNeeded: args.visits_needed,
+      lat: place.lat, lon: place.lon
+    });
+    return { content: [{ type: "text", text: `已在保存的「${place.label}」创建藏宝信（${letter.id}）。地图会出现模糊圈，走到真正藏宝点附近由手机实时 GPS 解锁；仅使用预存私人地点，不代表当前定位或实际路线已验证。` }] };
   }
   if (name === "shared_location") {
     const { shared } = await http("GET", "/api/location/share");
