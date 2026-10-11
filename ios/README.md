@@ -40,3 +40,18 @@ npm start
 ### 自动检查
 
 GitHub Actions 的 `ZFxF MVP checks` 会跑 JS 测试和 Vite 构建，并使用 macOS 生成 Xcode 工程，执行一次 iOS 模拟器无签名编译。这只能证明代码通过编译，**不代表已经在真 iPhone 上验证**。
+
+## 第二阶段：约会邀请与回执（原生，已连接 API）
+
+ZFxF 的第三个原生 tab 是「约会来信」。它会向已登录的 Node 后端请求 `GET /api/date-cards`。
+有支持 MCP 的 agent 调用 `create_date_card` 创建卡片后，下拉刷新或点击右上角刷新即可看见。
+
+- `invitation`（约会前）：填「想去哪里」「期待」「心情」「希望照顾的事情」。
+- `review`（约会后）：五类 1～5 星（半星）、最喜欢的事、下次希望、留言。全部可跳过评分。
+- 原生 UI 调用 `POST /api/date-cards/:id/submit`；提交后服务器返回最终状态，页面变只读。
+- Agent 可调用 `date_card_recent` 阅读原话，用 `date_card_agent_note` 写在卡片背面；下次 iPhone 刷新显示。
+- 原生 APNs 推送尚未实现。创建卡片 **不会自动弹出 iPhone 通知**。
+- 只有配置并部署受信任的 `DATE_CARD_WEBHOOK_URL` 时，提交后才会通知你自己的 Agent 服务；**当前没有自动通往 ChatGPT 的回调**。
+
+### 当前 VPS 部署状态
+开发中的 VPS 独立实例监听在 `127.0.0.1:5168`（非公开地址）。要在 iPhone 上连接，还需要给现有域名设置 **HTTPS 反向代理**。在验证外部访问携带密码确实返回 JSON 前，不要把 `https://ryanecho.xyz/zfxf` 当成可用 URL。域名和登录密码不写入源码。
