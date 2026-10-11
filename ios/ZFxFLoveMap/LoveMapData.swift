@@ -72,6 +72,53 @@ struct NewDatePayload: Encodable {
     let note: String
     let photos: [String]
 }
+struct DateCardRating: Codable, Identifiable {
+    let key: String
+    let title: String
+    var id: String { key }
+}
+
+struct DateCard: Codable, Identifiable {
+    let id: String
+    let kind: String
+    let title: String
+    let date: String
+    let place: String
+    let intro: String
+    let status: String
+    let ratings: [DateCardRating]
+    let createdAt: String
+    let submittedAt: String?
+    let answers: DateCardAnswers?
+    let agentNote: String?
+    let agentNoteAt: String?
+    let notification: String?
+}
+
+struct DateCardAnswers: Codable {
+    let whereTo: String?
+    let lookingForward: String?
+    let mood: String?
+    let needs: String?
+    let ratings: [String: Double]?
+    let favorite: String?
+    let nextTime: String?
+    let note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case whereTo = "where"
+        case lookingForward, mood, needs, ratings, favorite, nextTime, note
+    }
+}
+
+struct DateCardListResult: Decodable {
+    let cards: [DateCard]
+}
+struct DateCardResult: Decodable {
+    let ok: Bool?
+    let card: DateCard
+}
+
 struct LetterOpenPayload: Encodable {
     let lat: Double
     let lon: Double
@@ -145,6 +192,15 @@ struct LoveMapAPI {
         let result: NewDateResult = try await post("/api/dates", payload: payload)
         return result.entry
     }
+    func dateCards() async throws -> [DateCard] {
+        let result: DateCardListResult = try await get("/api/date-cards")
+        return result.cards
+    }
+    func submitDateCard(id: String, answers: DateCardAnswers) async throws -> DateCard {
+        let result: DateCardResult = try await post("/api/date-cards/\(id)/submit", payload: answers)
+        return result.card
+    }
+
     func openLetter(_ id: String, position: CLLocation) async throws -> LetterOpenResult {
         let p = LetterOpenPayload(lat: position.coordinate.latitude,
                                   lon: position.coordinate.longitude,
