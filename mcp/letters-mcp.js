@@ -60,11 +60,13 @@ async function locate(args) {
 const TOOLS = [
   {
     name: "hide_at_place",
-    description: "Hide something for the finder at a real place — a letter, a voice recording, an achievement, or any mix. On their map they see only a blurred circle around it, your riddle, and which kinds of things are inside (✉️ 🎧 🏅) — not the place name, not the contents. When they physically get within radius_m (their phone reports its location, or they tap 'I'm nearby' on the map), it's theirs: they open an envelope, an achievement lights up on their achievement wall, and the status flips to found/opened in trip_map.\n\nUse this when they're going somewhere — a trip, a museum, a café they mentioned — and you want something waiting for them there. Stops on the trip route are the natural spots.\n\nWhat to hide:\n- letter: words for that exact spot.\n- voice_url (+ voice_text transcript): a recording you already made, as a URL their phone can play (mp3 / m4a over https). Nothing is synthesized here.\n- badge: an achievement for making it there (蓝房子探险家 💙).\n\nNotes:\n- place is the short name they see once they've found it. address is what the map looks up — English or the local language plus the city ('Museo Frida Kahlo, Coyoacán, Mexico City'); Chinese-only names often resolve to the wrong country. Check the resolved address in the result; if it's wrong, take it back with remove_from_map and pass lat/lon instead.\n- radius_m: 150–300 for a building or park they'll linger in; 1000–5000 for 'the moment you land in this city'. Location is sampled every few minutes at best, so a spot they only walk past needs a bigger radius.\n- hint points at the place without naming it.\n- visits_needed makes it a repeat-visit achievement: it unlocks only after they've been there on that many separate days (counted at most once a day) — e.g. their gym, 5 days → 🏋️ 健身房常客. Progress shows on their map; nothing pings them about it.",
+    description: "Hide something for the finder at a real place — a letter, a voice recording, an achievement, or any mix. On their map they see only a blurred circle around it, your riddle, and which kinds of things are inside (✉️ 🎧 🏅) — not the place name, not the contents. When they physically get within radius_m (their phone reports its location, or they tap 'I'm nearby' on the map), it's theirs: they open an envelope, an achievement lights up on their achievement wall, and the status flips to found/opened in trip_map.\n\nUse this when they're going somewhere — a trip, a museum, a café they mentioned — and you want something waiting for them there. Stops on the trip route are the natural spots.\n\nWhat to hide:\n- letter: words for that exact spot.\n- voice_url (+ voice_text transcript): a recording you already made, as a URL their phone can play (mp3 / m4a over https). Nothing is synthesized here.\n- badge: an achievement for making it there (蓝房子探险家 💙).\n\nNotes:\n- place is the short name they see once they've found it. address is what the map looks up — English or the local language plus the city ('Museo Frida Kahlo, Coyoacán, Mexico City'); Chinese-only names often resolve to the wrong country. Check the resolved address in the result; if it's wrong, take it back with remove_from_map and pass lat/lon instead.\n- radius_m: 150–300 for a building or park they'll linger in; 1000–5000 for 'the moment you land in this city'. Location is sampled every few minutes at best, so a spot they only walk past needs a bigger radius.\n- mode: appointment=「赴约」，地图立刻显示具体信封坐标；encounter=「偶遇」，未经过前地图完全隐藏、经过后写入信箱。默认 appointment。
+- hint is a clue/caption; it does not reveal the body.\n- visits_needed makes it a repeat-visit achievement: it unlocks only after they've been there on that many separate days (counted at most once a day) — e.g. their gym, 5 days → 🏋️ 健身房常客. Progress shows on their map; nothing pings them about it.",
     inputSchema: {
       type: "object",
       properties: {
-        place: { type: "string", description: "找到以后看到的地名，短（例：蓝房子）" },
+        place: { type: "string", description: "信件所在地点名称（例：蓝房子）" },
+        mode: { type: "string", enum: ["appointment", "encounter"], description: "appointment=赴约（地图可见，主动去找）；encounter=偶遇（未经过前完全隐藏）。默认赴约" },
         hint: { type: "string", description: "地图上那片圈旁边的谜语，指向这个地方但不点名（例：墙是蓝的，里面住过一个一直在画自己的人）" },
         letter: { type: "string", description: "信的正文（可选）" },
         voice_url: { type: "string", description: "一段录好的音频的地址（可选，https 的 mp3 / m4a）" },
@@ -130,12 +132,13 @@ async function callTool(name, args) {
     const badge = args.badge_name ? { name: args.badge_name, emoji: args.badge_emoji, note: args.badge_note } : null;
     const voice = args.voice_url ? { url: args.voice_url, text: args.voice_text } : null;
     const { letter } = await http("POST", "/api/travel-map/letters", {
-      place: args.place, hint: args.hint, body: args.letter, voice, badge, radiusM: args.radius_m, visitsNeeded: args.visits_needed, lat: where.lat, lon: where.lon,
+      place: args.place, mode: args.mode || "appointment", hint: args.hint, body: args.letter, voice, badge, radiusM: args.radius_m, visitsNeeded: args.visits_needed, lat: where.lat, lon: where.lon,
     });
     const inside = [letter.body && "一封信", letter.voice && "一段语音", letter.badge && `成就 ${letter.badge.emoji} ${letter.badge.name}`].filter(Boolean).join(" + ");
     const times = letter.visitsNeeded > 1 ? `，要来 ${letter.visitsNeeded} 天才解锁` : "";
     const sv = letter.streetView ? `\n街景抓到一张${letter.streetView.date ? `（${letter.streetView.date}）` : ""}，拆开以后详情页里能看到。` : "";
-    return { content: [{ type: "text", text: `藏好了（${letter.id}）：「${letter.place}」，${inside}，半径 ${letter.radiusM}m${times}。\n地图查到的是：${where.label}${sv}\n地图上现在多了一片 ${Math.round(letter.area.r)}m 的模糊圈和谜语「${letter.hint}」。地址不对就 remove_from_map 收回、带 lat/lon 重藏。` }] };
+    const visibility = letter.mode === "encounter" ? "偶遇：解锁前地图上完全不可见，经过后才进入信箱" : "赴约：地图显示准确位置，到了附近才能拆封";
+    return { content: [{ type: "text", text: `藏好了（${letter.id}）：「${letter.place}」，${inside}，半径 ${letter.radiusM}m${times}。\n地图查到的是：${where.label}${sv}\n${visibility}。地址不对就 remove_from_map 收回、带 lat/lon 重藏。` }] };
   }
   if (name === "award_badge") {
     const { badge } = await http("POST", "/api/travel-map/badges", { name: args.name, emoji: args.emoji, note: args.note });
