@@ -31,8 +31,10 @@ export function registerManualLocationRoutes(app, dataDir, clock = () => new Dat
   const active = () => {
     if (!existsSync(file)) return null;
     const saved = JSON.parse(readFileSync(file, "utf8"));
-    return saved && Number.isFinite(Date.parse(saved.expiresAt)) &&
-      Date.parse(saved.expiresAt) > clock().getTime() ? saved : null;
+    if (saved && Number.isFinite(Date.parse(saved.expiresAt)) &&
+        Date.parse(saved.expiresAt) > clock().getTime()) return saved;
+    rmSync(file, { force: true }); // expired/revoked: actually remove disk copy
+    return null;
   };
 
   const save = (value) => {
@@ -44,6 +46,12 @@ export function registerManualLocationRoutes(app, dataDir, clock = () => new Dat
       rmSync(tmp, { force: true });
     }
   };
+
+  // An idle server should delete old precise coordinates too, even without any GET.
+  const purge = setInterval(() => {
+    try { active(); } catch (e) { console.warn("[location-share] expiry cleanup:", e.message); }
+  }, 5 * 60 * 1000);
+  purge.unref();
 
   app.use("/api/location/share", (_req, res, next) => {
     res.set("Cache-Control", "private, no-store");
