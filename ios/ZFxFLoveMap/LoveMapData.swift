@@ -173,6 +173,25 @@ struct SimpleActionResult: Decodable {
     let ok: Bool
 }
 
+struct GeofenceRegion: Decodable, Identifiable {
+    let id: String
+    let lat: Double
+    let lon: Double
+    let radiusM: Double
+
+    var location: CLLocation {
+        CLLocation(latitude: lat, longitude: lon)
+    }
+}
+struct GeofenceRegionsResult: Decodable {
+    let regions: [GeofenceRegion]
+}
+struct GeofenceDiscoverResult: Decodable {
+    let ok: Bool
+    let status: String
+    let letter: HiddenLetter
+}
+
 struct LetterOpenPayload: Encodable {
     let lat: Double
     let lon: Double
@@ -283,6 +302,32 @@ struct LoveMapAPI {
         guard try JSONDecoder().decode(SimpleActionResult.self, from: data).ok else {
             throw LoveMapError.invalidResponse
         }
+    }
+
+    func geofenceRegions() async throws -> [GeofenceRegion] {
+        let result: GeofenceRegionsResult = try await get("/api/geofences")
+        return result.regions
+    }
+
+    func discoverViaGeofence(_ id: String) async throws -> GeofenceDiscoverResult {
+        let data = try await requestData(
+            path: "/api/geofences/\(id)/discover",
+            method: "POST",
+            body: Data("{}".utf8)
+        )
+        return try JSONDecoder().decode(GeofenceDiscoverResult.self, from: data)
+    }
+
+    // After a server-confirmed discovery, opening never asks for GPS again.
+    func openDiscoveredLetter(_ id: String) async throws -> HiddenLetter {
+        let data = try await requestData(
+            path: "/api/travel-map/letters/\(id)/open",
+            method: "POST",
+            body: Data("{}".utf8)
+        )
+        let result = try JSONDecoder().decode(LetterOpenResult.self, from: data)
+        guard result.ok, let letter = result.letter else { throw LoveMapError.invalidResponse }
+        return letter
     }
 
     func treasureMap() async throws -> TreasureMap { try await get("/api/travel-map") }
