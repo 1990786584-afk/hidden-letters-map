@@ -234,6 +234,7 @@ struct TreasureMapView: View {
     )
     @State private var treasure: TreasureMap?
     @State private var savedPlaces: [SavedPlace] = []
+    @State private var hasFramedInitialMap = false
     @State private var selected: HiddenLetter?
     @State private var error: String?
     @State private var loading = false
@@ -253,6 +254,8 @@ struct TreasureMapView: View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 Map(position: $camera) {
+                    // System blue dot + directional cone. This never sends GPS to the VPS.
+                    UserAnnotation()
                     if let treasure {
                         ForEach(treasure.letters) { letter in
                             if let coordinate = letter.coordinate {
@@ -359,15 +362,18 @@ struct TreasureMapView: View {
                         Label("\(treasure?.letters.count ?? 0) 封藏起来的心意", systemImage: "envelope")
                         Spacer()
                         Button {
-                            locator.locate()
-                            if let here = locator.location {
-                                camera = .region(MKCoordinateRegion(center: here.coordinate, span:
-                                    MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)))
-                            }
+                            toggleLocationTracking()
                         } label: {
-                            Label("定位我", systemImage: "location")
+                            if camera.followsUserHeading {
+                                Label("位置跟随", systemImage: "location.fill")
+                            } else if camera.followsUserLocation {
+                                Label("方向跟随", systemImage: "location.north.fill")
+                            } else {
+                                Label("定位我", systemImage: "location")
+                            }
                         }
                         .buttonStyle(.borderedProminent)
+                        .accessibilityHint("首次点击跟随当前位置，再点击跟随面朝的方向；手动拖动地图可退出跟随。")
                     }
                     .font(.subheadline)
                     .padding(12)
@@ -402,6 +408,11 @@ struct TreasureMapView: View {
                                     .background(.white, in: RoundedRectangle(cornerRadius: 14))
                             }
                             if let openMessage { Text(openMessage).font(.footnote) }
+                            if letter.isSealed, let hint = approximateHintDistance(letter) {
+                                Label(hint, systemImage: "location.north.circle")
+                                    .font(.footnote)
+                                    .foregroundStyle(LovePalette.accent)
+                            }
                             if letter.status != "opened" {
                                 Button {
                                     Task { await open(letter) }
@@ -430,16 +441,25 @@ struct TreasureMapView: View {
             }
         }
         .task {
+            locator.startNavigation() // Foreground-only GPS/heading for the blue dot.
             await loadMap()
             await loadSavedPlaces()
             await refreshShareStatus()
-            locator.locate() // Only local map display; NO upload.
+            // Don't leave the user lost at the letter's approximate map marker.
+            // This mode follows the device's changing GPS location, not a frozen coordinate.
+            if !camera.positionedByUser {
+                camera = .userLocation(followsHeading: false, fallback: camera)
+            }
         }
         .onAppear {
+            locator.startNavigation()
             Task {
                 await loadSavedPlaces() // Refresh private pins after leaving Settings.
                 await refreshShareStatus() // Restore card when a share was revoked in Settings.
             }
+        }
+        .onDisappear {
+            locator.stopNavigation() // Never keep location/heading updates in background.
         }
         .confirmationDialog(
             "把此刻的位置分享给 Finnian？",
@@ -452,9 +472,9 @@ struct TreasureMapView: View {
             Text("会将当前坐标和定位精度发送到你的私人美国 VPS。服务器只保留最新一次分享，24 小时后失效；你可以随时撤回。不启用后台追踪。")
         }
         .onChange(of: locator.location) { _, newLocation in
+            // DO NOT overwrite camera on each GPS update: MapKit handles follow mode,
+            // and respects manual panning. Sharing remains manual only.
             guard let newLocation else { return }
-            camera = .region(MKCoordinateRegion(center: newLocation.coordinate,
-                       span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)))
             if waitingForFreshLocation && validForShare(newLocation) {
                 waitingForFreshLocation = false
                 Task { await uploadShare(newLocation) }
@@ -466,6 +486,34 @@ struct TreasureMapView: View {
                 shareMessage = newValue
             }
         }
+    }
+
+    @MainActor
+    private func toggleLocationTracking() {
+        locator.startNavigation()
+        withAnimation(.easeInOut(duration: 0.25)) {
+            if camera.followsUserHeading {
+                camera = .userLocation(followsHeading: false, fallback: .automatic)
+            } else if camera.followsUserLocation {
+                camera = .userLocation(followsHeading: true, fallback: .automatic)
+            } else {
+                camera = .userLocation(followsHeading: false, fallback: .automatic)
+            }
+        }
+    }
+
+    // A sealed letter's exact position is intentionally hidden.
+    // Only calculate distance to the visibly *fuzzy hint marker*, never
+    // claim this is the precise distance to the sealed letter.
+    private func approximateHintDistance(_ letter: HiddenLetter) -> String? {
+        guard let area = letter.area,
+              let here = locator.location,
+              here.horizontalAccuracy >= 0,
+              abs(here.timestamp.timeIntervalSinceNow) < 90 else { return nil }
+        let hintCenter = CLLocation(latitude: area.lat, longitude: area.lon)
+        let meters = Int(here.distance(from: hintCenter).rounded())
+        if meters < 20 { return "已靠近地图上的提示点，实际藏宝位置可能还在附近 ♡" }
+        return "距地图上的线索标记约 \(meters) 米（不是信的精确位置）"
     }
 
     // We never send a cached or invalid location, even if MapKit can display it.
@@ -573,10 +621,13 @@ struct TreasureMapView: View {
             treasure = result
             error = nil
             presentEmptyHint(when: result.letters.isEmpty)
-            if let coordinate = result.stops.first.map({ CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
-                ?? result.letters.compactMap(\.coordinate).first {
-                camera = .region(MKCoordinateRegion(center: coordinate,
-                              span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
+            if !hasFramedInitialMap {
+                hasFramedInitialMap = true
+                if let coordinate = result.stops.first.map({ CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
+                    ?? result.letters.compactMap(\.coordinate).first {
+                    camera = .region(MKCoordinateRegion(center: coordinate,
+                                  span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
+                }
             }
         } catch {
             self.error = error.localizedDescription
