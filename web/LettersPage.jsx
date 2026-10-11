@@ -177,6 +177,8 @@ export default function LettersPage() {
   const [note, setNote] = useState("");
   const [reading, setReading] = useState(null); // 拆开的那封 { letter, fresh }
   const [wall, setWall] = useState(false);
+  const [inbox, setInbox] = useState(false); // 永久信箱：免打扰错过的信仍然留在这里
+  const [inboxTab, setInboxTab] = useState("all");
   const [me, setMe] = useState(null); // 点了「定位我」之后手机实时的位置 { lat, lon, acc }
   const watchRef = useRef(null); // geolocation.watchPosition 的句柄
   const flownRef = useRef(false); // 第一次拿到实时定位飞过去一次
@@ -193,6 +195,10 @@ export default function LettersPage() {
     area: l.area && { ...l.area, lon: nearLon(l.area.lon, refs) },
     lon: l.lon != null ? nearLon(l.lon, refs) : l.lon,
   })), [data, refs]);
+  const received = useMemo(() => letters.filter((l) => l.status === "found" || l.status === "opened")
+    .sort((a, b) => (b.foundAt || b.openedAt || "").localeCompare(a.foundAt || a.openedAt || "")), [letters]);
+  const unreadCount = received.filter((l) => l.status === "found").length;
+  const inboxLetters = received.filter((l) => inboxTab === "all" || (inboxTab === "unread" ? l.status === "found" : l.status === "opened"));
   const marks = useMemo(() => (data?.marks || []).map((m) => ({ ...m, lon: nearLon(m.lon, refs) })), [data, refs]);
   // 人在哪：实时定位优先，没开就用手机最后一次上报的位置（太久以前的不画）
   const her = useMemo(() => {
@@ -219,9 +225,11 @@ export default function LettersPage() {
   const nearby = useMemo(() => {
     const arr = [];
     for (const l of letters) {
-      const sealed = l.status === "sealed"; const p = sealed ? l.area : l; if (!p) continue;
+      const sealed = l.status === "sealed";
+      const publicDestination = sealed && l.mode === "appointment";
+      const p = sealed && !publicDestination ? l.area : l; if (!p) continue;
       const raw = her ? M(her, p) : null;
-      arr.push({ kind: "letter", id: l.id, obj: l, raw, d: raw == null ? null : sealed ? raw - l.area.r : raw, at: l.createdAt });
+      arr.push({ kind: "letter", id: l.id, obj: l, raw, d: raw == null ? null : sealed ? raw - (publicDestination ? l.radiusM : l.area.r) : raw, at: l.createdAt });
     }
     for (const m of marks) { const raw = her ? M(her, m) : null; arr.push({ kind: "mark", id: m.id, obj: m, raw, d: raw, at: m.createdAt }); }
     return her ? arr.sort((a, b) => Math.max(a.d, 0) - Math.max(b.d, 0) || a.raw - b.raw) : arr.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
@@ -290,7 +298,7 @@ export default function LettersPage() {
       }
     }
     // 封着的：腮红粉柔光雾圈（大圈画在小圈下面，不然 9 公里那片会吃掉科约阿坎那片的点击）
-    [...letters].filter((l) => l.status === "sealed" && l.area).sort((a, b) => b.area.r - a.area.r).forEach((l) => {
+    [...letters].filter((l) => l.status === "sealed" && l.mode !== "appointment" && l.area).sort((a, b) => b.area.r - a.area.r).forEach((l) => {
       L.circle([l.area.lat, l.area.lon], { radius: l.area.r, className: `lm-fog${on("letter", l.id)}` }).on("click", pick("letter", l.id, l)).addTo(layer);
     });
     stops.forEach((s, i) => {
@@ -300,8 +308,8 @@ export default function LettersPage() {
       const sel = on("letter", l.id); const o = { cls: sel + dropCls, delay: delay() };
       let html; let pos; let z = 400; let big = false;
       if (l.status === "sealed") {
-        if (!l.area) continue;
-        pos = [l.area.lat, l.area.lon];
+        if (l.mode === "appointment") pos = [l.lat, l.lon];
+        else { if (!l.area) continue; pos = [l.area.lat, l.area.lon]; }
         if (l.id === nearestId) { html = PIN.nearest(o); z = 900; big = true; } else html = PIN.sealed(o);
       } else {
         pos = [l.lat, l.lon]; z = 500;
@@ -323,11 +331,11 @@ export default function LettersPage() {
         for (const it of nearby) {
           if (it.raw == null || it.raw > 2500) continue;
           const o = it.obj;
-          if (it.kind === "letter" && o.status === "sealed") b.extend(L.latLng(o.area.lat, o.area.lon).toBounds(o.area.r * 2)); else b.extend([o.lat, o.lon]);
+          if (it.kind === "letter" && o.status === "sealed" && o.mode !== "appointment") b.extend(L.latLng(o.area.lat, o.area.lon).toBounds(o.area.r * 2)); else b.extend([o.lat, o.lon]);
         }
         map.fitBounds(b, { paddingTopLeft: [24, 250], paddingBottomRight: [24, 380], maxZoom: 16, animate: false });
       } else {
-        const pts = [...stops.map((s) => [s.lat, s.lon]), ...letters.map((l) => (l.status === "sealed" ? [l.area.lat, l.area.lon] : [l.lat, l.lon])), ...marks.map((m) => [m.lat, m.lon])];
+        const pts = [...stops.map((s) => [s.lat, s.lon]), ...letters.map((l) => (l.status === "sealed" && l.mode !== "appointment" ? [l.area.lat, l.area.lon] : [l.lat, l.lon])), ...marks.map((m) => [m.lat, m.lon])];
         if (pts.length) map.fitBounds(pts, { paddingTopLeft: [24, 250], paddingBottomRight: [24, 380], maxZoom: 14 });
       }
       fittedRef.current = true;
@@ -347,7 +355,10 @@ export default function LettersPage() {
   function select(kind, id, o) {
     setSelected({ kind, id }); setMarking(null); setNote("");
     const map = mapRef.current; if (!map || !o) return;
-    if (kind === "letter" && o.status === "sealed") map.flyToBounds(L.latLng(o.area.lat, o.area.lon).toBounds(o.area.r * 2.2), PAD_SHEET);
+    if (kind === "letter" && o.status === "sealed") {
+      if (o.mode === "appointment") map.flyTo([o.lat, o.lon], 16, { duration: 0.7 });
+      else map.flyToBounds(L.latLng(o.area.lat, o.area.lon).toBounds(o.area.r * 2.2), PAD_SHEET);
+    }
     else if (kind === "stop") map.flyToBounds(L.latLng(o.lat, o.lon).toBounds(30000), PAD_SHEET);
     else map.flyToBounds(L.latLng(o.lat, o.lon).toBounds(500), PAD_SHEET);
   }
@@ -441,9 +452,14 @@ export default function LettersPage() {
             <p className="sub">{letters.length ? <><b>{sealedCount}</b> 处还藏着<i /><b>{foundCount}</b> 处找到了</> : `${NAMES.hider}还没开始藏东西`}</p>
           </div>
         </div>
-        <button type="button" className="lm-wall-btn" aria-label="成就墙" onClick={() => setWall(true)}>
-          <span className="lm-mini-coin">★</span>{earned.length > 0 && <b>{earned.length}</b>}
-        </button>
+        <div className="lm-head-actions">
+          <button type="button" className="lm-wall-btn lm-inbox-btn" aria-label={`我们的信箱，${unreadCount} 封未读`} onClick={() => { setSelected(null); setInbox(true); }}>
+            <span aria-hidden="true">✉</span>{unreadCount > 0 && <b>{unreadCount}</b>}
+          </button>
+          <button type="button" className="lm-wall-btn" aria-label="成就墙" onClick={() => setWall(true)}>
+            <span className="lm-mini-coin">★</span>{earned.length > 0 && <b>{earned.length}</b>}
+          </button>
+        </div>
       </header>
       {days.length > 0 && (
         <nav className="lm-chips" aria-label="旅程站点">
@@ -476,10 +492,10 @@ export default function LettersPage() {
             if (o.status === "sealed") return (
               <button key={o.id} type="button" className="lm-card" style={style} onClick={() => select("letter", o.id, o)}>
                 <div className="lm-ill"><Art html={illSealed(o, o.id === nearestId)} /><span className="lm-kick k-sealed">SEALED</span></div>
-                <h4>{o.hint}</h4><p className="tg">{(o.contents || []).map((c) => CONTENT_LABEL[c]).join(" · ")}</p>
+                <h4>{o.mode === "appointment" ? `赴约 · ${o.place}` : o.hint}</h4><p className="tg">{(o.contents || []).map((c) => CONTENT_LABEL[c]).join(" · ")}</p>
                 <p className="ad"><MapPin className="lm-ic" />{mdAt(o.createdAt)} 藏的</p>
                 {o.visitsNeeded > 1 ? <p className="ft"><Pdots visits={o.visits} needed={o.visitsNeeded} />来过 {o.visits || 0} 天 · 满 {o.visitsNeeded} 天解锁</p>
-                  : her ? <p className="ft">{it.d <= 0 ? <span className="lm-medot" /> : <Route className="lm-ic" />}{nearText(o.area)}</p> : null}
+                  : her ? <p className="ft">{it.d <= 0 ? "就在附近，可以拆信" : <><Route className="lm-ic" />{o.mode === "appointment" ? awayText(Math.max(0, it.d)) : nearText(o.area)}</>}</p> : null}
               </button>
             );
             const opened = o.status === "opened";
@@ -515,11 +531,13 @@ export default function LettersPage() {
             <>
               <div className="lm-krow"><span className="lm-kick k-sealed">SEALED</span>这附近藏着东西 · {mdAt(sel.createdAt)} 藏的</div>
               <div className="lm-sh-main"><div className="lm-sh-ill"><Art html={illSealed(sel, sel.id === nearestId)} /></div><div>
-                <p className="lm-sh-title">{sel.hint}</p>
-                {her && <p className="lm-near-line">{inCircle(sel.area) ? <span className="lm-medot" /> : <Route className="lm-ic" />}{nearText(sel.area)}</p>}
+                <p className="lm-sh-title">{sel.mode === "appointment" ? `赴约 · ${sel.place}` : sel.hint}</p>
+                {her && <p className="lm-near-line"><Route className="lm-ic" />{sel.mode === "appointment" ? awayText(Math.max(0, M(her, sel) - sel.radiusM)) : nearText(sel.area)}</p>}
               </div></div>
               <Tags list={sel.contents} />
               {sel.visitsNeeded > 1 && <div className="lm-progress"><Pdots visits={sel.visits} needed={sel.visitsNeeded} />来过 {sel.visits || 0} 天 · 满 {sel.visitsNeeded} 天解锁</div>}
+              {sel.mode === "appointment" && <a className="lm-go lm-nav-go" target="_blank" rel="noopener noreferrer"
+                href={`https://maps.apple.com/?daddr=${sel.lat},${sel.lon}&dirflg=w`}>🗺 前往这封信的位置</a>}
               <button type="button" className="lm-go" disabled={!!busy} onClick={() => open(sel)}>
                 <LocateFixed className="lm-ic" strokeWidth={1.7} /> {busy ? "看看你在哪…" : sel.visitsNeeded > 1 ? "我今天来了" : "我就在这附近"}
               </button>
@@ -562,6 +580,33 @@ export default function LettersPage() {
         </section>
       )}
 
+      {inbox && (
+        <div className="lm-inbox-bg" role="dialog" aria-label="我们的信箱" aria-modal="true"
+          onClick={(e) => { if (e.target === e.currentTarget) setInbox(false); }}>
+          <section className="lm-inbox-sheet">
+            <button type="button" className="lm-x" aria-label="关闭信箱" onClick={() => setInbox(false)}><X size={17} /></button>
+            <p className="lm-inbox-overline">Letters waiting for you</p>
+            <h2>我们的信箱 <span>♡</span></h2>
+            <p className="lm-inbox-intro">路过时没看见通知也没关系。你已经遇见的信，都在这里。</p>
+            <nav className="lm-inbox-tabs" aria-label="筛选信件">
+              {[[ "all", `全部 ${received.length}` ], [ "unread", `擦肩而过 · 未读 ${unreadCount}` ], [ "read", `已读 ${received.length - unreadCount}` ]].map(([k, label]) => (
+                <button key={k} type="button" className={inboxTab === k ? "on" : ""} onClick={() => setInboxTab(k)}>{label}</button>
+              ))}
+            </nav>
+            <div className="lm-inbox-list">
+              {inboxLetters.length ? inboxLetters.map((l) => (
+                <button key={l.id} type="button" className="lm-inbox-letter" onClick={() => { setInbox(false); open(l); }}>
+                  <span className="lm-inbox-symbol">{l.status === "found" ? "💌" : "♡"}</span>
+                  <span className="lm-inbox-desc"><strong>{l.place}</strong><small>{l.status === "found" ? `在 ${mdAt(l.foundAt)} 擦肩而过 · 等你拆开` : `已在 ${mdAt(l.openedAt)} 读过 · 点击重温`}</small></span>
+                  <span aria-hidden="true">›</span>
+                </button>
+              )) : <p className="lm-inbox-empty">这里暂时没有信，新的相遇会慢慢到来。</p>}
+            </div>
+            <a className="lm-inbox-export" href="/api/mailbox/export" download>↓ 导出已收到的信（备份）</a>
+            <p className="lm-inbox-backup">当前信件仍由你的 VPS 保存，建议定期下载备份；云端长期保存尚未接入。</p>
+          </section>
+        </div>
+      )}
       {reading && <Reading letter={reading.letter} fresh={reading.fresh} onClose={() => setReading(null)} />}
       {wall && <BadgeWall earned={earned} locked={lockedBadges} onClose={() => setWall(false)} />}
     </div>
