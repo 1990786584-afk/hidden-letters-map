@@ -1,0 +1,24 @@
+name: ZFxFLoveMap
+
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+targets:
+  ZFxFLoveMap:
+    type: application
+    platform: iOS
+    sources:
+      - path: ZFxFLoveMap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zfxf.lovemap
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "为了在藏宝地图里确认你是否已经抵达藏信地点。"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
