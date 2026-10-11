@@ -299,6 +299,6 @@ app.post("/api/push/unsubscribe", (req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, process.env.HOST || "0.0.0.0", () => {
   console.log(`[letters] http://localhost:${PORT}  数据在 ${DATA_DIR}${existsSync(join(__dirname, "dist")) ? "" : "（页面还没 build）"}`);
 });
