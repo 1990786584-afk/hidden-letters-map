@@ -257,7 +257,7 @@ final class LoveMapSession: ObservableObject {
     @Published var serverAddress: String
 
     init() {
-        let address = UserDefaults.standard.string(forKey: "zfxf.server") ?? ""
+        let address = UserDefaults.standard.string(forKey: "zfxf.server") ?? "https://memory.ryanecho.xyz/zfxf"
         serverAddress = address
         connected = address.hasPrefix("https://") && !SecretStore.load().isEmpty
     }
