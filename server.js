@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { registerDateRoutes } from "./dates.js";
 import { registerDateCardRoutes } from "./date-cards.js";
 import { registerManualLocationRoutes } from "./location-share.js";
+import { registerSavedPlacesRoutes } from "./saved-places.js";
 import { fileURLToPath } from "node:url";
 import { createBadge, createLetter, createMark, createStop, distanceM, lettersInReach, publicLetter, shouldRecordFrame, sortStops, visitAt } from "./letters.js";
 
@@ -141,6 +142,7 @@ app.use((req, res, next) => {
 });
 registerDateRoutes(app, DATA_DIR); // 只有经过上方鉴权的请求才能看到私密相册
 registerManualLocationRoutes(app, DATA_DIR); // 点按时才分享一次；独立存储，可撤回，24 小时失效
+registerSavedPlacesRoutes(app, DATA_DIR); // 「家/学校/散步点」私人坐标，需鉴权，不上传公开仓库
 registerDateCardRoutes(app, DATA_DIR, {
   webhookUrl: process.env.DATE_CARD_WEBHOOK_URL,
   webhookToken: process.env.DATE_CARD_WEBHOOK_TOKEN,
