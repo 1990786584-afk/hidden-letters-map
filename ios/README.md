@@ -88,3 +88,16 @@ ZFxF 的第三个原生 tab 是「约会来信」。它会向已登录的 Node �
 - **第一次安装后地点库为空**，不会凭空知道用户住所或学校坐标。当前 ChatGPT 会话若未连接该 MCP，需要通过现有 VPS 管理工具代为查询和藏信；并非自然语言消息自动触发 App 事件。
 - VPS 部署已测试，22 项 Node 测试全过；最终 iOS 编译请查看 GitHub Actions，真机体验仍需用户更新版本。
 
+
+## 藏宝地图实时定位和方向跟随（2026-10-11）
+
+修复真实找信时看不到自己在地图上的问题：
+
+- 使用 MapKit 原生 `UserAnnotation()` 绘制系统蓝色定位点（及设备支持的方向提示），不使用服务器上一次分享的坐标冒充当前位置。
+- 「藏宝地图」在屏幕显示期间才通过 `CLLocationManager.startUpdatingLocation()` 和 `startUpdatingHeading()` 获取 GPS／朝向；切换走这个页面即停止更新。仅供本机地图显示与按键解锁，**不上传到 VPS**。原来「分享这一次」依旧必须二次确认。
+- 进入地图自动尝试跟随本人；右下角位置按钮依次在**跟随位置 → 跟随朝向 → 跟随位置**间切换。手动拖动地图退出跟随，再点击即可重新定位。
+- iOS MapKit 原生 `MapCameraPosition.userLocation(followsHeading:fallback:)` 控制相机，避免旧逻辑每次位置刷新就强行切回静态地图中心。重新加载藏宝列表也不会抢走用户正在看的位置。
+- 如果打开一封仍封着的信，且设备具有新鲜 GPS，详情显示**距离模糊线索标记中心**的约数，不假装这就是精确藏宝坐标；真实解锁由后端当场定位判定。
+- 地图蓝点和朝向需要 iPhone 允许「使用 App 期间」定位、设备本身的 GPS/磁力计；模拟器不代表真机定位行为。
+
+更新原生 App：`cd ~/Projects/ZFxF && git pull --ff-only && cd ios && xcodegen generate && open ZFxFLoveMap.xcodeproj`，随后在 Xcode 选设备按 Run。若未安装 xcodegen，首次通过 `brew install xcodegen` 安装（如 Homebrew 缺失需先完成环境配置）。
