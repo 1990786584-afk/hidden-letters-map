@@ -21,6 +21,7 @@ final class LetterGeofenceManager: NSObject, ObservableObject, CLLocationManager
     private var api: LoveMapAPI?
     private var syncing = false
     private var lastKnownLocation: CLLocation?
+    private var requestedAlwaysPermissionThisSession = false
 
     override init() {
         enabled = UserDefaults.standard.bool(forKey: "zfxf.geofence.enabled")
@@ -60,8 +61,13 @@ final class LetterGeofenceManager: NSObject, ObservableObject, CLLocationManager
         UserDefaults.standard.set(true, forKey: enabledKey)
         self.api = api
         if manager.authorizationStatus != .authorizedAlways {
-            manager.requestAlwaysAuthorization()
             statusMessage = "请在 iPhone 系统定位权限中允许「始终」，才能在后台经过时提醒。"
+            if manager.authorizationStatus == .notDetermined {
+                manager.requestWhenInUseAuthorization()
+            } else {
+                requestedAlwaysPermissionThisSession = true
+                manager.requestAlwaysAuthorization()
+            }
         }
         await refreshIfEnabled(api: api)
     }
@@ -84,7 +90,8 @@ final class LetterGeofenceManager: NSObject, ObservableObject, CLLocationManager
             statusMessage = permissionDetail
             return
         }
-        guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else {
+        guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self),
+              manager.maximumRegionMonitoringDistance > 0 else {
             stopAllRegions()
             statusMessage = "此设备当前不支持地理围栏监测。"
             return
@@ -146,6 +153,12 @@ final class LetterGeofenceManager: NSObject, ObservableObject, CLLocationManager
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        // Initial "When In Use" request must complete before upgrading to Always.
+        if enabled && manager.authorizationStatus == .authorizedWhenInUse &&
+            !requestedAlwaysPermissionThisSession {
+            requestedAlwaysPermissionThisSession = true
+            manager.requestAlwaysAuthorization()
+        }
         Task { await refreshIfEnabled(api: api) }
     }
 
@@ -226,10 +239,11 @@ final class LetterGeofenceManager: NSObject, ObservableObject, CLLocationManager
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let letterID = response.notification.request.content.userInfo["letterID"] as? String
+        // Never keep iOS waiting for network before completing notification tap.
+        completionHandler()
         Task { @MainActor in
             await self.flushPending()
             self.requestedLetterID = letterID
-            completionHandler()
         }
     }
 }
