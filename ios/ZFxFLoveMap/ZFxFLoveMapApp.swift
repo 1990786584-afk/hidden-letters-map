@@ -84,7 +84,7 @@ struct ConnectionSetupView: View {
                     VStack(alignment: .leading, spacing: 15) {
                         Text("连接我们的藏宝服务器")
                             .font(.headline)
-                        TextField("https://love.example.com", text: $address)
+                        TextField("https://memory.ryanecho.xyz/zfxf", text: $address)
                             .keyboardType(.URL)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
@@ -95,7 +95,7 @@ struct ConnectionSetupView: View {
                             .textContentType(.password)
                             .padding(12)
                             .background(.white, in: RoundedRectangle(cornerRadius: 12))
-                        Text("这是原生 iPhone App。藏宝信件与约会照片保存在你自己的服务器上，需要先部署仓库里的 Node 后端并启用 HTTPS。")
+                        Text("服务器已配置 HTTPS。请使用我们独立的 ZFxF 密码连接；之后会安全保存到 iPhone 钥匙串，不需要每次输入。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         if let error = session.error {
