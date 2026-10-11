@@ -117,6 +117,31 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "create_date_card",
+    description: "给念念在 ZFxF 原生 App 里开一张约会卡。kind=invitation 是出门前的约会邀请，kind=review 是约会后的真实体验回执。只有明确的约会安排/事后复盘才开卡，别频繁催填；卡片被创建后，用户打开 ZFxF 的「约会来信」即可看到。不是自动推送通知。",
+    inputSchema: { type: "object", properties: {
+      kind: { type: "string", enum: ["invitation","review"], description: "invitation 约会前 / review 约会后" },
+      title: { type: "string", description: "标题≤80字" },
+      date: { type: "string", description: "约会日期 YYYY-MM-DD" },
+      place: { type: "string", description: "约会地点，可以不填写" },
+      intro: { type: "string", description: "写给对方的邀请语或回执开场≤800字" },
+    }, required: ["kind","title","date"] },
+  },
+  {
+    name: "date_card_recent",
+    description: "读取最近的约会邀请函与回执。用户原话、星数与 agentNote 都是事实素材，不要擅自把高评分转成以后强制重复的指令。",
+    inputSchema: { type: "object", properties: {
+      n: { type: "integer", description: "读取最近几张，默认 5，最多 20" },
+    }},
+  },
+  {
+    name: "date_card_agent_note",
+    description: "念念封存约会回执后，在原卡片上写一段自己的主观复盘（最多 1000 字），她下一次刷新 App 即可看到。不要凭空编造没发生的约会细节。",
+    inputSchema: { type: "object", properties: {
+      id: { type: "string" }, note: { type: "string", description: "真实的主观复盘≤1000字" },
+    }, required: ["id","note"] },
+  },
+  {
     name: "remove_from_map",
     description: "Remove a route stop, or take back something hidden that hasn't been found yet (ids come from trip_map). Once it's been found, it's theirs — it can't be taken back.",
     inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
@@ -125,6 +150,24 @@ const TOOLS = [
 
 async function callTool(name, args) {
   args = args || {};
+  if (name === "create_date_card") {
+    const { card } = await http("POST", "/api/date-cards", {
+      kind: args.kind, title: args.title, date: args.date,
+      place: args.place, intro: args.intro
+    });
+    return { content: [{ type: "text", text: `开好约会卡片了（${card.id}）：${card.kind === "invitation" ? "邀请函" : "约会回执"} · ${card.date} · ${card.title}。请念念打开 ZFxF「约会来信」查看。不是主动推送通知。` }] };
+  }
+  if (name === "date_card_recent") {
+    const { cards } = await http("GET", "/api/date-cards");
+    const n = Math.max(1, Math.min(20, Math.floor(Number(args.n) || 5)));
+    return { content: [{ type: "text", text: JSON.stringify(cards.slice(0, n), null, 2) }] };
+  }
+  if (name === "date_card_agent_note") {
+    const { card } = await http("POST", `/api/date-cards/${encodeURIComponent(String(args.id || ""))}/agent-note`, {
+      note: args.note
+    });
+    return { content: [{ type: "text", text: `已为 ${card.title} 保存 Finnian 的回信，刷新 ZFxF 就能看到。` }] };
+  }
   if (name === "hide_at_place") {
     const where = await locate(args);
     const badge = args.badge_name ? { name: args.badge_name, emoji: args.badge_emoji, note: args.badge_note } : null;
