@@ -22,3 +22,17 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+
+  ios-native-build:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: cd ios && xcodegen generate
+      - name: Compile iOS simulator app without signing
+        run: |
+          cd ios
+          xcodebuild -project ZFxFLoveMap.xcodeproj -scheme ZFxFLoveMap -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
