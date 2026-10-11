@@ -19,6 +19,7 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "用于藏宝地图里确认到访地点；只有你主动点击「分享这一次」时，才会把当前坐标发送到私人服务器。"
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "用于显示你在藏宝地图上的位置和拆信。只有主动分享时才上传当前位置。"
+        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "仅在你主动开启「擦肩来信」后，iPhone 会在后台监测附近未读信的位置，并在经过时提醒你；不会连续上传行踪，可以随时在 ZFxF 设置中关闭。"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
