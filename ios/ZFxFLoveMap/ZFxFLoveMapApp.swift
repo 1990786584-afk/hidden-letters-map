@@ -29,37 +29,66 @@ struct PinkLetter: View {
 @main
 struct ZFxFLoveMapApp: App {
     @StateObject private var session = LoveMapSession()
+    @StateObject private var geofences = LetterGeofenceManager()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .environmentObject(geofences)
                 .tint(LovePalette.accent)
         }
     }
 }
 
+private enum LoveTab: Hashable {
+    case map, passing, board, cards, settings
+}
+
 struct RootView: View {
     @EnvironmentObject private var session: LoveMapSession
+    @EnvironmentObject private var geofences: LetterGeofenceManager
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var selectedTab: LoveTab = .map
 
     var body: some View {
         Group {
             if session.connected {
-                TabView {
+                TabView(selection: $selectedTab) {
                     TreasureMapView()
                         .tabItem { Label("藏宝地图", systemImage: "map") }
+                        .tag(LoveTab.map)
+                    PassingLettersView()
+                        .tabItem { Label("擦肩来信", systemImage: "envelope.open") }
+                        .tag(LoveTab.passing)
                     DateBoardView()
                         .tabItem { Label("约会板", systemImage: "heart.text.square") }
+                        .tag(LoveTab.board)
                     DateCardsView()
                         .tabItem { Label("约会来信", systemImage: "envelope.badge") }
+                        .tag(LoveTab.cards)
                     ConnectionInfoView()
                         .tabItem { Label("设置", systemImage: "gearshape") }
+                        .tag(LoveTab.settings)
                 }
             } else {
                 ConnectionSetupView()
             }
         }
         .preferredColorScheme(.light)
+        .task(id: session.connected) {
+            await geofences.refreshIfEnabled(api: session.api)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await geofences.refreshIfEnabled(api: session.api) }
+            }
+        }
+        .onChange(of: geofences.requestedLetterID) { _, id in
+            if id != nil && session.connected {
+                selectedTab = .passing
+            }
+        }
     }
 }
 
@@ -128,6 +157,8 @@ struct ConnectionSetupView: View {
 
 struct ConnectionInfoView: View {
     @EnvironmentObject private var session: LoveMapSession
+    @EnvironmentObject private var geofences: LetterGeofenceManager
+    @State private var showingBackgroundConsent = false
     @State private var sharedLocation: SharedLocation?
     @State private var checkingShare = true
     @State private var revokingShare = false
@@ -172,6 +203,42 @@ struct ConnectionInfoView: View {
                         Text(shareError).font(.footnote).foregroundStyle(.red)
                     }
                 }
+                Section("那些与你擦肩而过的信 💌") {
+                    Text("走过藏宝地点时，iOS 可以在后台提醒你发现了信；信不会自动拆开，晚上再读也行。通知可能晚到，并不精确到秒。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("仅监测附近最多 19 个尚未发现的单次到访藏宝区域；不连续上传你的行踪。新藏的信要在 App 再次打开后才会同步。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if geofences.enabled {
+                        Label("已选择开启后台来信监测", systemImage: "checkmark.shield")
+                            .foregroundStyle(LovePalette.accent)
+                        Button("关闭后台来信监测", role: .destructive) {
+                            geofences.disable()
+                        }
+                    } else {
+                        Button {
+                            showingBackgroundConsent = true
+                        } label: {
+                            Label("我同意开启经过地点时的提醒", systemImage: "bell.badge")
+                        }
+                    }
+                    Text(geofences.permissionDetail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(geofences.statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if geofences.enabled {
+                        if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                            Link("去 iPhone 设置检查定位和通知权限", destination: settingsURL)
+                                .font(.footnote)
+                        }
+                        Button("同步附近的藏宝信") {
+                            Task { await geofences.refreshIfEnabled(api: session.api) }
+                        }
+                    }
+                }
                 Section("我们的秘密宇宙") {
                     NavigationLink {
                         SavedPlacesView()
@@ -185,7 +252,22 @@ struct ConnectionInfoView: View {
                 }
             }
             .navigationTitle("我们的设置")
-            .task { await refreshSharedLocation() }
+            .confirmationDialog(
+                "允许「那些与你擦肩而过的信」在后台提醒你吗？",
+                isPresented: $showingBackgroundConsent,
+                titleVisibility: .visible
+            ) {
+                Button("我同意，申请通知与始终定位权限") {
+                    Task { await geofences.enableWithConsent(api: session.api) }
+                }
+                Button("先不开启", role: .cancel) {}
+            } message: {
+                Text("iPhone 仅监测附近未发现的藏宝区域，经过时发本地通知，并向私人 VPS 标记那封信已发现；不会自动拆信、不会持续上传 GPS 轨迹。可随时在此关闭。系统可能延迟通知，或因定位权限和省电限制而漏报。")
+            }
+            .task {
+                await refreshSharedLocation()
+                await geofences.refreshIfEnabled(api: session.api)
+            }
         }
     }
 
@@ -418,11 +500,13 @@ struct TreasureMapView: View {
                                     Task { await open(letter) }
                                 } label: {
                                     if opening { ProgressView() }
-                                    else { Text("我到这里啦，拆开信 ♡") }
+                                    else { Text(letter.status == "found" ? "我想现在拆开信 ♡" : "我到这里啦，拆开信 ♡") }
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(opening)
-                                Text("靠近藏宝点并允许定位才能拆开。地图上的模糊圈不是精确位置。")
+                                Text(letter.status == "found"
+                                     ? "你已经经过了藏宝地点，可以在任何地方亲手拆开这封信 ♡"
+                                     : "靠近藏宝点并允许定位才能拆开。地图上的模糊圈不是精确位置。")
                                     .font(.footnote).foregroundStyle(.secondary)
                             }
                         }
@@ -637,6 +721,18 @@ struct TreasureMapView: View {
     @MainActor
     private func open(_ letter: HiddenLetter) async {
         guard let api = session.api else { return }
+        if letter.status == "found" {
+            opening = true
+            defer { opening = false }
+            do {
+                selected = try await api.openDiscoveredLetter(letter.id)
+                openMessage = nil
+                await loadMap()
+            } catch {
+                openMessage = error.localizedDescription
+            }
+            return
+        }
         guard let position = locator.location else {
             locator.locate()
             openMessage = "正在确认你的位置，等定位完成后再点一次。"
