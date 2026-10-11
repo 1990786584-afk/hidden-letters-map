@@ -190,9 +190,10 @@ struct ConnectionInfoView: View {
     }
 
     private func shareExpiry(_ iso: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: iso) else {
-            return "分享后的 24 小时内"
-        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = formatter.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        guard let date else { return "分享后约 24 小时" }
         return date.formatted(date: .abbreviated, time: .shortened)
     }
 
