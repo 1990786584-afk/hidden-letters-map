@@ -36,7 +36,7 @@ struct DateCardsView: View {
                         ProgressView("正在查收我们的信…").padding(38)
                     } else if cards.isEmpty {
                         VStack(spacing: 12) {
-                            Text("💌").font(.system(size: 50))
+                            PinkLetter(size: 55).frame(height: 67)
                             Text("还没有收到约会邀请。")
                                 .font(.headline)
                             Text("以后我给你开一张邀请函或约会回执，它就会出现在这里。")
@@ -64,7 +64,7 @@ struct DateCardsView: View {
                 .padding(.horizontal, 18)
                 .padding(.bottom, 36)
             }
-            .background(Color(red: 0.98, green: 0.94, blue: 0.95))
+            .background(LovePalette.background)
             .navigationTitle("约会来信")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -103,10 +103,17 @@ private struct DateCardRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Text(card.kind == "invitation" ? "💌" : "🎀")
-                .font(.system(size: 35))
+            Group {
+                if card.kind == "invitation" {
+                    PinkLetter(size: 37)
+                } else {
+                    Image(systemName: "heart.text.square.fill")
+                        .font(.system(size: 37))
+                        .foregroundStyle(LovePalette.accent)
+                }
+            }
                 .frame(width: 54, height: 60)
-                .background(Color(red: 0.97, green: 0.91, blue: 0.93),
+                .background(LovePalette.blush,
                             in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 5) {
                 Text(card.kind == "invitation" ? "DATE INVITATION" : "DATE REVIEW")
@@ -120,7 +127,7 @@ private struct DateCardRow: View {
                 Label(card.status == "pending" ? "等待你的回信" : "已经收藏",
                       systemImage: card.status == "pending" ? "envelope" : "checkmark.seal")
                     .font(.caption)
-                    .foregroundStyle(card.status == "pending" ? .pink : .secondary)
+                    .foregroundStyle(card.status == "pending" ? LovePalette.accent : Color.secondary)
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
@@ -158,8 +165,17 @@ private struct DateCardDetail: View {
             Form {
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(isInvitation ? "💌" : "🎀").font(.system(size: 48))
-                            .frame(maxWidth: .infinity)
+                        Group {
+                            if isInvitation {
+                                PinkLetter(size: 60)
+                            } else {
+                                Image(systemName: "heart.text.square.fill")
+                                    .font(.system(size: 56))
+                                    .foregroundStyle(LovePalette.accent)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 74)
                         Text(isInvitation ? "DATE INVITATION" : "DATE REVIEW")
                             .font(.system(size: 12, design: .serif)).tracking(2)
                             .foregroundStyle(.secondary)
@@ -261,7 +277,7 @@ private struct DateCardDetail: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color(red: 0.98, green: 0.94, blue: 0.95))
+            .background(LovePalette.background)
             .navigationTitle(isInvitation ? "约会邀请函" : "约会回执")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
