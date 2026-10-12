@@ -15,6 +15,7 @@
 //   remove_from_map({ id })
 
 import readline from "node:readline";
+import { distanceM } from "../letters.js";
 
 const LETTERS_URL = (process.env.LETTERS_URL || "http://localhost:3000").replace(/\/$/, "");
 const PASSWORD = process.env.LETTERS_PASSWORD || "";
@@ -117,6 +118,61 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "create_date_card",
+    description: "给念念在 ZFxF 原生 App 里开一张约会卡。kind=invitation 是出门前的约会邀请，kind=review 是约会后的真实体验回执。只有明确的约会安排/事后复盘才开卡，别频繁催填；卡片被创建后，用户打开 ZFxF 的「约会来信」即可看到。不是自动推送通知。",
+    inputSchema: { type: "object", properties: {
+      kind: { type: "string", enum: ["invitation","review"], description: "invitation 约会前 / review 约会后" },
+      title: { type: "string", description: "标题≤80字" },
+      date: { type: "string", description: "约会日期 YYYY-MM-DD" },
+      place: { type: "string", description: "约会地点，可以不填写" },
+      intro: { type: "string", description: "写给对方的邀请语或回执开场≤800字" },
+    }, required: ["kind","title","date"] },
+  },
+  {
+    name: "list_saved_places",
+    description: "Read the user's explicitly saved private aliases (e.g. 家 / 学校 / 上海迪士尼 / 楼下公园) from ZFxF. Returns names, kinds, and optional walking notes, NOT coordinates. These are remembered reference locations, NOT proof of where the user is right now. Use after the user refers to a saved location or asks for a walk surprise. If they say '我在家', understand that as their report, not live location tracking.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "hide_at_saved_place",
+    description: "Hide a genuine ZFxF letter at an existing private saved destination alias (家/学校/迪士尼). For a short walking surprise, provide near_alias=家 and OMIT alias: automatically select a separately saved reachable public walk spot 100–800m away, preferring one without an existing sealed letter. Never make up coordinates or put surprises on random roads. Optional alias selects a specific saved destination. Tell the user only AFTER successful creation. GPS at destination is still needed to unlock.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        alias: { type: "string", description: "Optional exact saved destination name; omit when near_alias is set to auto-pick a nearby saved public walk point." },
+        near_alias: { type: "string", description: "Optional originating alias, e.g. 家. If specified, destination must be a separate 'walk' place nearby." },
+        max_distance_m: { type: "number", description: "Optional straight-line walking target maximum, 100..2000m, default 800m. Does not guarantee real walking-route distance." },
+        hint: { type: "string", description: "A riddle for the sealed envelope" },
+        letter: { type: "string", description: "Hidden message; at least letter or badge_name required" },
+        radius_m: { type: "number", description: "GPS unlock radius, 50–300m recommended" },
+        visits_needed: { type: "number", description: "Visits on distinct days to unlock; default 1" },
+        badge_name: { type: "string" },
+        badge_emoji: { type: "string" },
+        badge_note: { type: "string" }
+      },
+      required: ["hint"]
+    }
+  },
+  {
+    name: "shared_location",
+    description: "Read only the last location that the user deliberately shared with Finnian in the native ZFxF app. Sharing expires automatically after 24 hours; if null, do NOT infer the user's live location. This is NOT real-time tracking. Do not query unless location is relevant to the user's request.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "date_card_recent",
+    description: "读取最近的约会邀请函与回执。用户原话、星数与 agentNote 都是事实素材，不要擅自把高评分转成以后强制重复的指令。",
+    inputSchema: { type: "object", properties: {
+      n: { type: "integer", description: "读取最近几张，默认 5，最多 20" },
+    }},
+  },
+  {
+    name: "date_card_agent_note",
+    description: "念念封存约会回执后，在原卡片上写一段自己的主观复盘（最多 1000 字），她下一次刷新 App 即可看到。不要凭空编造没发生的约会细节。",
+    inputSchema: { type: "object", properties: {
+      id: { type: "string" }, note: { type: "string", description: "真实的主观复盘≤1000字" },
+    }, required: ["id","note"] },
+  },
+  {
     name: "remove_from_map",
     description: "Remove a route stop, or take back something hidden that hasn't been found yet (ids come from trip_map). Once it's been found, it's theirs — it can't be taken back.",
     inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
@@ -125,6 +181,74 @@ const TOOLS = [
 
 async function callTool(name, args) {
   args = args || {};
+  if (name === "create_date_card") {
+    const { card } = await http("POST", "/api/date-cards", {
+      kind: args.kind, title: args.title, date: args.date,
+      place: args.place, intro: args.intro
+    });
+    return { content: [{ type: "text", text: `开好约会卡片了（${card.id}）：${card.kind === "invitation" ? "邀请函" : "约会回执"} · ${card.date} · ${card.title}。请念念打开 ZFxF「约会来信」查看。不是主动推送通知。` }] };
+  }
+  if (name === "list_saved_places") {
+    const { places } = await http("GET", "/api/places");
+    return { content: [{ type: "text", text: places.length ?
+      JSON.stringify(places.map(({ label, kind, note }) => ({ label, kind, note })), null, 2) :
+      "暂时没有保存任何私人地点。请念念在 ZFxF「设置 → 秘密地点」先保存；不能猜她的家庭/学校坐标。" }] };
+  }
+  if (name === "hide_at_saved_place") {
+    const { places } = await http("GET", "/api/places");
+    const alias = String(args.alias || "").trim();
+    const nearAlias = String(args.near_alias || "").trim();
+    const matching = value => places.find(p => p.label.normalize("NFKC").toLowerCase() === value.normalize("NFKC").toLowerCase());
+    const origin = nearAlias ? matching(nearAlias) : null;
+    if (nearAlias && !origin) throw new Error("出发地点还没保存。请念念先在 ZFxF 设置里添加，不要猜家庭坐标。");
+    const max = Math.min(2000, Math.max(100, Number(args.max_distance_m) || 800));
+    let place = alias ? matching(alias) : null;
+    if (alias && !place) throw new Error(`私人地点「${alias}」还没保存，请先让念念在 ZFxF 里保存，不能猜坐标。`);
+    if (!place && origin) {
+      const map = await http("GET", "/api/travel-map/full");
+      const sealed = (map.letters || []).filter(l => l.status === "sealed");
+      const candidates = places.filter(p => p.id !== origin.id && p.kind === "walk")
+        .map(p => ({...p, distance: Math.round(distanceM(p, origin))}))
+        .filter(p => p.distance >= 100 && p.distance <= max)
+        .sort((a,b) => a.distance-b.distance);
+      const unused = candidates.filter(p => !sealed.some(l => distanceM(l,p) < 60));
+      place = unused[0] || candidates[0] || null;
+      if (!place) throw new Error(`「${origin.label}」附近尚无 100～${max} 米内保存的安全散步点。先在 App 添加一个公园/步道，才好藏惊喜。`);
+    }
+    if (!place) throw new Error("请指定 alias，或提供 near_alias 让我从已保存的散步地点中挑选。");
+    if (origin) {
+      if (place.id === origin.id || place.kind !== "walk")
+        throw new Error("散步惊喜需要选一个独立保存的、已确认适合步行的地点（类型：适合散步）");
+      const away = Math.round(distanceM(place, origin));
+      if (away < 100 || away > max)
+        throw new Error(`这个目标与出发地直线相距约 ${away} 米，不在 100～${max} 米的适用范围。`);
+    }
+    const badge = args.badge_name ? { name: args.badge_name, emoji: args.badge_emoji, note: args.badge_note } : null;
+    if (!String(args.letter || "").trim() && !badge) throw new Error("至少要藏一封信或一枚成就");
+    const { letter } = await http("POST", "/api/travel-map/letters", {
+      place: place.label, hint: args.hint, body: args.letter,
+      badge, radiusM: args.radius_m || 100, visitsNeeded: args.visits_needed,
+      lat: place.lat, lon: place.lon
+    });
+    return { content: [{ type: "text", text: `已在保存的「${place.label}」创建藏宝信（${letter.id}）。地图会出现模糊圈，走到真正藏宝点附近由手机实时 GPS 解锁；仅使用预存私人地点，不代表当前定位或实际路线已验证。` }] };
+  }
+  if (name === "shared_location") {
+    const { shared } = await http("GET", "/api/location/share");
+    return { content: [{ type: "text", text: shared
+      ? JSON.stringify({ found: true, ...shared }, null, 2)
+      : "目前没有有效的主动分享位置，不能据此判断念念在哪里。" }] };
+  }
+  if (name === "date_card_recent") {
+    const { cards } = await http("GET", "/api/date-cards");
+    const n = Math.max(1, Math.min(20, Math.floor(Number(args.n) || 5)));
+    return { content: [{ type: "text", text: JSON.stringify(cards.slice(0, n), null, 2) }] };
+  }
+  if (name === "date_card_agent_note") {
+    const { card } = await http("POST", `/api/date-cards/${encodeURIComponent(String(args.id || ""))}/agent-note`, {
+      note: args.note
+    });
+    return { content: [{ type: "text", text: `已为 ${card.title} 保存 Finnian 的回信，刷新 ZFxF 就能看到。` }] };
+  }
   if (name === "hide_at_place") {
     const where = await locate(args);
     const badge = args.badge_name ? { name: args.badge_name, emoji: args.badge_emoji, note: args.badge_note } : null;

@@ -1,0 +1,44 @@
+name: ZFxF MVP checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["feature/zfxf-date-board-mvp"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  ios-native-build:
+    runs-on: macos-15
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: cd ios && xcodegen generate
+      - name: Compile iOS simulator app without signing
+        run: |
+          cd ios
+          xcodebuild -project ZFxFLoveMap.xcodeproj -scheme ZFxFLoveMap -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Downloadable Xcode project for iPhone signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZFxF-native-iPhone-project
+          path: ios/
+          retention-days: 30

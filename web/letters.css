@@ -372,3 +372,8 @@
 
 /* 插画区里的 SVG 容器 */
 .lm-ill > .art, .lm-sh-ill > .art { display: block; height: 100%; }
+
+/* ZFxF: entrance to the date scrapbook; existing achievement button is preserved. */
+.lm-head-actions { display: flex; align-items: center; flex: none; gap: 8px; }
+.lm-page .lm-dates-link { padding: 10px 12px; background: var(--lm-grain), var(--lm-paper); border: 1px solid var(--lm-rule); border-radius: 24px; font-size: 12px; color: var(--lm-ink); box-shadow: var(--lm-shadow); white-space: nowrap; }
+@media (max-width: 390px) { .lm-page .lm-dates-link { padding: 9px 8px; font-size: 11px; } }

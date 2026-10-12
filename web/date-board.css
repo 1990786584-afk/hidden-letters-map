@@ -1,0 +1,50 @@
+/* ZFxF scrapbook — independent of the original treasure map's styles. */
+.zf-board { min-height: 100dvh; box-sizing: border-box; overflow-y: auto; padding: max(28px, env(safe-area-inset-top)) 18px max(38px, env(safe-area-inset-bottom)); background: #f8f0f1; color: #5b404b; font-family: "Songti SC", "STSong", "Noto Serif SC", serif; }
+.zf-board * { box-sizing: border-box; }
+.zf-head, .zf-toolbar, .zf-editor, .zf-grid, .zf-empty, .zf-footer { max-width: 720px; margin-left: auto; margin-right: auto; }
+.zf-head { text-align: center; padding: 4px 0 18px; }
+.zf-back { display: block; margin-bottom: 26px; border: 1px solid #e3ccd1; color: #896471; border-radius: 50px; background: #fffafa; padding: 10px 14px; font-size: 13px; cursor: pointer; }
+.zf-eyebrow { font: 600 11px/1.5 Georgia, serif; letter-spacing: .18em; color: #b08995; }
+.zf-head h1 { margin: 13px 0 10px; font-size: clamp(25px, 6vw, 36px); font-weight: 500; letter-spacing: .04em; }
+.zf-head p { color: #9a7c85; font-size: 13px; line-height: 1.8; margin: 0; }
+.zf-toolbar { padding: 16px 0 22px; display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 13px; color: #ad8993; }
+.zf-primary { border: 0; border-radius: 28px; background: #ae7b8e; color: #fffafc; padding: 12px 17px; font: 500 13px/1.3 inherit; cursor: pointer; box-shadow: 0 5px 12px #ad81902f; }
+.zf-primary:disabled { opacity: .5; cursor: default; }
+.zf-grid { display: grid; gap: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.zf-card { background: #fffcf9; border-radius: 6px; padding: 10px 10px 15px; box-shadow: 0 5px 20px #86616d1b; transform: rotate(-1deg); min-width: 0; }
+.zf-card:nth-child(even) { transform: rotate(1.4deg); }
+.zf-card-open { background: none; width: 100%; border: 0; padding: 0; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.zf-card-cover { width: 100%; aspect-ratio: 1 / 1; background: #f3dce2; position: relative; overflow: hidden; }
+.zf-card-cover img { width: 100%; height: 100%; object-fit: cover; }
+.zf-card-empty { display: grid; place-items: center; color: #dba4b6; font: 60px/1 Georgia, serif; }
+.zf-count { position: absolute; right: 8px; bottom: 8px; background: #fffcf9ed; padding: 4px 9px; border-radius: 12px; font-size: 11px; }
+.zf-card-text { display: flex; flex-direction: column; gap: 8px; padding: 13px 4px 0; overflow-wrap: anywhere; }
+.zf-card-text strong { font-size: 16px; font-weight: 600; line-height: 1.4; }
+.zf-card-text > span:last-child { font-size: 12px; color: #927780; }
+.zf-card-date { color: #a98b94; font: italic 12px/1 Georgia, serif; letter-spacing: .1em; }
+.zf-card-story { padding: 12px 4px 2px; border-top: 1px dashed #e2cbd2; margin-top: 12px; line-height: 1.8; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.zf-card-story p { margin: 0 0 12px; }
+.zf-photo-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.zf-photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.zf-editor { background: #fffcf9; border: 1px solid #ecdde0; border-radius: 17px; padding: 22px; margin-bottom: 28px; box-shadow: 0 8px 24px #86596712; }
+.zf-editor h2 { margin: 0 0 20px; color: #855f70; font: italic 23px Georgia, serif; }
+.zf-editor h2 span { color: #dd9bab; }
+.zf-editor label { font-size: 13px; display: block; margin: 14px 0; color: #8b6874; }
+.zf-editor input:not([type="file"]), .zf-editor textarea { width: 100%; margin-top: 8px; display: block; border: 1px solid #e9d7dc; background: #fffcfd; border-radius: 9px; padding: 12px; color: #5b404b; font: 15px/1.5 inherit; outline-color: #ad8090; }
+.zf-editor textarea { resize: vertical; }
+.zf-fields { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; }
+.zf-upload { display: block; padding: 12px; border: 1px dashed #c99caa; background: #fbf1f3; border-radius: 9px; cursor: pointer; }
+.zf-upload input { display: block; width: 100%; margin-top: 8px; font-size: 12px; }
+.zf-previews { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.zf-preview { position: relative; width: 80px; height: 80px; }
+.zf-preview img { width: 100%; height: 100%; border-radius: 7px; object-fit: cover; }
+.zf-preview button { position: absolute; top: -7px; right: -7px; border: 0; border-radius: 50%; background: #764c5f; color: white; width: 23px; height: 23px; cursor: pointer; }
+.zf-save { margin-top: 14px; width: 100%; }
+.zf-error { max-width: 720px; margin: 0 auto 20px; padding: 10px 14px; color: #9c3757; background: #ffe8ed; border-radius: 9px; font-size: 13px; }
+.zf-empty { padding: 55px 20px; text-align: center; color: #a98b94; background: #fffafc80; border: 1px dashed #ead4da; border-radius: 18px; }
+.zf-empty > span { font-size: 42px; }
+.zf-empty h2 { font-size: 19px; font-weight: 500; color: #876b77; }
+.zf-empty p { font-size: 13px; line-height: 1.7; }
+.zf-footer { text-align: center; margin-top: 55px; padding: 20px; color: #bea3ad; font: italic 13px Georgia, serif; }
+@media (min-width: 620px) { .zf-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 370px) { .zf-fields { grid-template-columns: 1fr; gap: 0; } .zf-editor { padding: 15px; } .zf-toolbar { flex-wrap: wrap; } }

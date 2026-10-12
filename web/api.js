@@ -14,6 +14,8 @@ async function req(path, { method = "GET", body } = {}) {
 
 export const api = {
   travelMap: () => req("/api/travel-map"),
+  dates: () => req("/api/dates"),
+  addDate: (payload) => req("/api/dates", { method: "POST", body: payload }),
   openLetter: (id, pos = {}) => req(`/api/travel-map/letters/${encodeURIComponent(id)}/open`, { method: "POST", body: pos }),
   addMark: (mark) => req("/api/travel-map/marks", { method: "POST", body: mark }),
   removeMark: (id) => req(`/api/travel-map/${encodeURIComponent(id)}`, { method: "DELETE" }),
